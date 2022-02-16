@@ -36,6 +36,20 @@ def hipBuildTest(String backendLabel) {
             }
         }
 
+        stage("Build - HIPCC") {
+            // Running the build on HIPCC workspace
+            dir("${WORKSPACE}/HIPCC") {
+                sh  """#!/usr/bin/env bash
+                    set -x
+                    rm -rf build
+                    mkdir build
+                    cd build/
+                    cmake ..
+                    make
+                    """
+            }
+        }
+
         stage("Build - Catch2 framework") {
             // Running the build on hipamd workspace
             dir("${WORKSPACE}/hipamd") {
