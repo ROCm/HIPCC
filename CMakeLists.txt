@@ -4,6 +4,7 @@ project (hipcc.bin)
 # Specify the C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
+set (EXECUTABLE_OUTPUT_PATH "bin")
 
 set (LINK_LIBS libstdc++fs.so)
 add_executable(hipcc.bin src/hipBin.cpp)
