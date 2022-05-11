@@ -1098,6 +1098,11 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
     HIPLDFLAGS += " -lgcc_s -lgcc -lpthread -lm -lrt";
   }
 
+  // to avoid using dk linker or MSVC linker
+  if (os == windows) {
+    HIPLDFLAGS += " -fuse-ld=lld";
+  }
+
   if (os != windows && !compileOnly) {
     string hipClangVersion, toolArgTemp;
     if (linkType == 0) {
