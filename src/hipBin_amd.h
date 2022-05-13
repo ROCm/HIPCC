@@ -1100,7 +1100,7 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
 
   // to avoid using dk linker or MSVC linker
   if (os == windows) {
-    HIPLDFLAGS += " -fuse-ld=lld";
+    HIPLDFLAGS += " -fuse-ld=lld --ld-path=$HIP_CLANG_PATH/lld-link.exe";
   }
 
   if (os != windows && !compileOnly) {
