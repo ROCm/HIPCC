@@ -203,11 +203,6 @@ string HipBinAmd::getHipInclude() const {
 void HipBinAmd::initializeHipCXXFlags() {
   string hipCXXFlags;
   const OsType& os = getOSInfo();
-  if (os == windows) {
-    hipCXXFlags = " -std=c++14 -fms-extensions -fms-compatibility";
-  } else {
-    hipCXXFlags = " -std=c++11";
-  }
   string hipClangIncludePath;
   hipClangIncludePath = getCompilerIncludePath();
   hipCXXFlags += " -isystem \"" + hipClangIncludePath;
@@ -359,13 +354,13 @@ string HipBinAmd::getCppConfig() {
 }
 
 string HipBinAmd::getDeviceLibPath() const {
-  string deviceLibPath;
   const EnvVariables& var = getEnvVariables();
   const string& rocclrHomePath = getRocclrHomePath();
   const string& roccmPath = getRoccmPath();
   fs::path bitCodePath = rocclrHomePath;
   bitCodePath /= "lib/bitcode";
-  if (var.deviceLibPathEnv_.empty() && fs::exists(bitCodePath)) {
+  string deviceLibPath = var.deviceLibPathEnv_;
+  if (deviceLibPath.empty() && fs::exists(bitCodePath)) {
     deviceLibPath = bitCodePath.string();
   }
 
@@ -1093,7 +1088,6 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
                                   + deviceLibPath + "\"";
       HIPCXXFLAGS += hip_device_lib_str;
     }
-    HIPCXXFLAGS += " -fhip-new-launch-api";
   }
   if (os != windows) {
     HIPLDFLAGS += " -lgcc_s -lgcc -lpthread -lm -lrt";
@@ -1161,20 +1155,8 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
     sysOut = hipBinUtilPtr_->exec(CMD.c_str(), true);
     string cmdOut = sysOut.out;
     int CMD_EXIT_CODE = sysOut.exitCode;
-    if (CMD_EXIT_CODE == -1) {
-      cout <<  "failed to execute: $!\n";
-    } else if (CMD_EXIT_CODE & 127) {
-      string childOut;
-      int childCode;
-      (CMD_EXIT_CODE & 127),  (CMD_EXIT_CODE & 128) ?
-              childOut = "with" : childOut = "without";
-      (CMD_EXIT_CODE & 127),  (CMD_EXIT_CODE & 128) ?
-              childCode = (CMD_EXIT_CODE & 127) :
-              childCode = (CMD_EXIT_CODE & 128);
-      cout <<  "child died with signal " << childCode << "," << childOut <<
-                          " coredump "<< " for cmd: " << CMD << endl;
-    } else {
-      CMD_EXIT_CODE = CMD_EXIT_CODE >> 8;
+    if (CMD_EXIT_CODE !=0) {
+      cout <<  "failed to execute:"  << CMD << std::endl;
     }
     exit(CMD_EXIT_CODE);
   }  // end of runCmd section
