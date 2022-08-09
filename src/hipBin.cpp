@@ -143,7 +143,7 @@ void HipBin::executeHipConfig(int argc, char* argv[]) {
         break;
       case path: cout << platformPtrs.at(j)->getHipPath();
         break;
-      case roccmpath: cout << platformPtrs.at(j)->getRoccmPath();
+      case rocmpath: cout << platformPtrs.at(j)->getRocmPath();
         break;
       case cpp_config: cout << platformPtrs.at(j)->getCppConfig();
         break;
