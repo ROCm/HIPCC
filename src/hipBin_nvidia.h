@@ -78,16 +78,16 @@ bool HipBinNvidia::detectPlatform() {
   fs::path cmdNv = nvccPath;
   cmdNv /= "bin/nvcc";
   const OsType& os = getOSInfo();
-  const EnvVariables& var = getEnvVariables();
+  const Variables& var = getEnvVariables();
   bool detected = false;
-  if (var.hipPlatformEnv_.empty()) {
+  if (var.hipPlatform_.empty()) {
     if (canRunCompiler(cmdNv.string(), out) || (canRunCompiler("nvcc", out))) {
       detected = true;
     }
   } else {
-    if (var.hipPlatformEnv_ == "nvidia" || var.hipPlatformEnv_ == "nvcc") {
+    if (var.hipPlatform_ == "nvidia" || var.hipPlatform_ == "nvcc") {
       detected = true;
-      if (var.hipPlatformEnv_ == "nvcc")
+      if (var.hipPlatform_ == "nvcc")
         cout << "Warning: HIP_PLATFORM=nvcc is deprecated."
              << "Please use HIP_PLATFORM=nvidia." << endl;
     }
@@ -136,14 +136,14 @@ void HipBinNvidia::checkHipconfig() {
 void HipBinNvidia::printFull() {
   const string& hipVersion = getHipVersion();
   const string&  hipPath = getHipPath();
-  const string& roccmPath = getRoccmPath();
+  const string& rocmPath = getRocmPath();
   const PlatformInfo& platformInfo = getPlatformInfo();
   const string& ccpConfig = getCppConfig();
   const string& cudaPath = getCompilerPath();
   cout << "HIP version: " << hipVersion << endl;
   cout << endl << "==hipconfig" << endl;
   cout << "HIP_PATH           :" << hipPath << endl;
-  cout << "ROCM_PATH          :" << roccmPath << endl;
+  cout << "ROCM_PATH          :" << rocmPath << endl;
   cout << "HIP_COMPILER       :" << CompilerTypeStr(
                                     platformInfo.compiler) << endl;
   cout << "HIP_PLATFORM       :" << PlatformTypeStr(
@@ -221,21 +221,21 @@ void HipBinNvidia::initializeHipCXXFlags() {
 // returns Hip Lib Path
 string HipBinNvidia::getHipLibPath() const {
   string hipLibPath;
-  const EnvVariables& env = getEnvVariables();
-  hipLibPath = env.hipLibPathEnv_;
+  const Variables& env = getEnvVariables();
+  hipLibPath = env.hipLibPath_;
   return hipLibPath;
 }
 
 // gets nvcc compiler Path
 void HipBinNvidia::constructCompilerPath() {
   string complierPath;
-  const EnvVariables& envVariables = getEnvVariables();
-  if (envVariables.cudaPathEnv_.empty()) {
+  const Variables& envVariables = getEnvVariables();
+  if (envVariables.cudaPath_.empty()) {
     fs::path cudaPathfs;
     cudaPathfs = "/usr/local/cuda";
     complierPath = cudaPathfs.string();
   } else {
-    complierPath = envVariables.cudaPathEnv_;
+    complierPath = envVariables.cudaPath_;
   }
   cudaPath_ = complierPath;
 }
@@ -291,10 +291,10 @@ void HipBinNvidia::executeHipCCCmd(vector<string> argv) {
     cout<< "No Arguments passed, exiting ...\n";
     exit(EXIT_SUCCESS);
   }
-  const EnvVariables& var = getEnvVariables();
+  const Variables& var = getEnvVariables();
   int verbose = 0;
-  if (!var.verboseEnv_.empty())
-    verbose = stoi(var.verboseEnv_);
+  if (!var.verbose_.empty())
+    verbose = stoi(var.verbose_);
   // Verbose: 0x1=commands, 0x2=paths, 0x4=hipcc args
   // set if user explicitly requests -stdlib=libc++.
   // (else we default to libstdc++ for better interop with g++):
@@ -335,10 +335,10 @@ void HipBinNvidia::executeHipCCCmd(vector<string> argv) {
   bool skipOutputFile = false;
   const OsType& os = getOSInfo();
   string hip_compile_cxx_as_hip;
-  if (var.hipCompileCxxAsHipEnv_.empty()) {
+  if (var.hipCompileCxxAsHip_.empty()) {
     hip_compile_cxx_as_hip = "1";
   } else {
-    hip_compile_cxx_as_hip = var.hipCompileCxxAsHipEnv_;
+    hip_compile_cxx_as_hip = var.hipCompileCxxAsHip_;
   }
   string HIPLDARCHFLAGS;
   initializeHipCXXFlags();
@@ -551,12 +551,12 @@ void HipBinNvidia::executeHipCCCmd(vector<string> argv) {
     HIPCXXFLAGS += " -M -D__CUDACC__";
     HIPCFLAGS += " -M -D__CUDACC__";
   }
-  if (!var.hipccCompileFlagsAppendEnv_.empty()) {
-    HIPCXXFLAGS += "\" " + var.hipccCompileFlagsAppendEnv_ + "\"";
-    HIPCFLAGS += "\" " + var.hipccCompileFlagsAppendEnv_ + "\"";
+  if (!var.hipccCompileFlagsAppend_.empty()) {
+    HIPCXXFLAGS += "\" " + var.hipccCompileFlagsAppend_ + "\"";
+    HIPCFLAGS += "\" " + var.hipccCompileFlagsAppend_ + "\"";
   }
-  if (!var.hipccLinkFlagsAppendEnv_.empty()) {
-    HIPLDFLAGS += "\" " + var.hipccLinkFlagsAppendEnv_ + "\"";
+  if (!var.hipccLinkFlagsAppend_.empty()) {
+    HIPLDFLAGS += "\" " + var.hipccLinkFlagsAppend_ + "\"";
   }
   string compiler;
   compiler = getHipCC();
