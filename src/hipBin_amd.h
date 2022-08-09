@@ -85,9 +85,10 @@ HipBinAmd::HipBinAmd() {
   platformInfo.runtime = rocclr;
   platformInfo.compiler = clang;
   platformInfoAMD_ = platformInfo;
+
+  // delay constructing paths until we parse compiler options that may override these.
   constructRocclrHomePath();    // constructs RocclrHomePath
   constructHsaPath();           // constructs hsa path
-  constructCompilerPath();
 }
 
 // returns the Rocclr Home path
@@ -229,29 +230,28 @@ void HipBinAmd::initializeHipCXXFlags() {
 
 // populates clang path.
 void HipBinAmd::constructCompilerPath() {
-  string complierPath;
+  string compilerPath;
   const Variables& envVariables = getEnvVariables();
+  string rocm_path_name = getrocm_pathOption();
+
   if (envVariables.hipClangPath_.empty()) {
     fs::path hipClangPath;
     const OsType& osInfo = getOSInfo();
     if (osInfo == windows) {
-      complierPath = getHipPath();
-      hipClangPath = complierPath;
+      compilerPath = getHipPath();
+      hipClangPath = compilerPath;
       hipClangPath /= "bin";
     } else {
-      complierPath = getRocmPath();
-      hipClangPath = complierPath;
+      compilerPath = getRocmPath();
+      hipClangPath = compilerPath;
       hipClangPath /= "llvm/bin";
     }
-    complierPath = hipClangPath.string();
+    compilerPath = hipClangPath.string();
   } else {
-    complierPath = envVariables.hipClangPath_;
+    compilerPath = envVariables.hipClangPath_;
   }
-  hipClangPath_ = complierPath;
+  hipClangPath_ = compilerPath;
 }
-
-
-
 
 // returns clang path.
 const string& HipBinAmd::getCompilerPath() const {
@@ -522,6 +522,14 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
   if (!var.verbose_.empty())
     verbose = stoi(var.verbose_);
 
+  // set rocm-path from compiler options ...
+  setrocm_pathOption(argv);
+
+  // now construct Paths ...
+  constructHipPath();           // constructs HIP Path
+  constructRocmPath();         // constructs Roccm Path
+  readHipVersion();             // stores the hip version
+
   // Verbose: 0x1=commands, 0x2=paths, 0x4=hipcc args
   // set if user explicitly requests -stdlib=libc++
   // (else we default to libstdc++ for better interop with g++)
@@ -573,6 +581,7 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
 
   string HIPLDARCHFLAGS;
 
+  constructCompilerPath();
   initializeHipCXXFlags();
   initializeHipCFlags();
   initializeHipLdFlags();

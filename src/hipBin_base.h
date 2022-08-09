@@ -232,6 +232,7 @@ class HipBinBase {
   void getSystemInfo() const;
   void printEnvironmentVariables() const;
   const Variables& getEnvVariables() const;
+  const Variables& getVariables() const;
   const OsType& getOSInfo() const;
   const string& getHipPath() const;
   const string& getRocmPath() const;
@@ -239,30 +240,30 @@ class HipBinBase {
   void printUsage() const;
   bool canRunCompiler(string exeName, string& cmdOut);
   HipBinCommand gethipconfigCmd(string argument);
+  const string& getrocm_pathOption() const;
+  void setrocm_pathOption(vector<string> argv);
 
  protected:
   // hipBinUtilPtr used by derived platforms
   // so therefore its protected
   HipBinUtil* hipBinUtilPtr_;
-
- private:
-  Variables envVariables_, variables_;
-  OsType osInfo_;
-  string hipVersion_;
   void readOSInfo();
   void readEnvVariables();
   void constructHipPath();
   void constructRocmPath();
   void readHipVersion();
+
+ private:
+  Variables envVariables_, variables_;
+  OsType osInfo_;
+  string hipVersion_;
+  string rocm_pathOption_ = "";
 };
 
 HipBinBase::HipBinBase() {
   hipBinUtilPtr_ = hipBinUtilPtr_->getInstance();
   readOSInfo();                 // detects if windows or linux
-  readEnvVariables();           // reads the envirnoment variables
-  constructHipPath();           // constructs HIP Path
-  constructRocmPath();         // constructs Rocm Path
-  readHipVersion();             // stores the hip version
+  readEnvVariables();           // reads the environment variables
 }
 
 // detects the OS information
@@ -331,18 +332,22 @@ void HipBinBase::constructHipPath() {
 
 // constructs the ROCM path
 void HipBinBase::constructRocmPath() {
-  if (envVariables_.rocmPath_.empty()) {
-    const string& hipPath = getHipPath();
-    fs::path rocm_path(hipPath);
-    rocm_path = rocm_path.parent_path();
-    fs::path rocm_agent_enumerator_file(rocm_path);
-    rocm_agent_enumerator_file /= "bin/rocm_agent_enumerator";
-    if (!fs::exists(rocm_agent_enumerator_file)) {
-      rocm_path = "/opt/rocm";
-    }
-    variables_.rocmPath_ = rocm_path.string();
-  } else {
-    variables_.rocmPath_ = envVariables_.rocmPath_;}
+    // we need to use --rocm-path option
+    string rocm_path_name = getrocm_pathOption();
+
+    // chose the --rocm-path option first, if specified.
+    if (!rocm_path_name.empty())
+      variables_.rocmPath_ = rocm_path_name;
+    else if (envVariables_.rocmPath_.empty()) {
+      const string& hipPath = getHipPath();
+      fs::path rocm_path(hipPath);
+      rocm_path = rocm_path.parent_path();
+      fs::path rocm_agent_enumerator_file(rocm_path);
+      rocm_agent_enumerator_file /= "bin/rocm_agent_enumerator";
+      if (!fs::exists(rocm_agent_enumerator_file))
+        rocm_path = "/opt/rocm";
+    } else
+        variables_.rocmPath_ = envVariables_.rocmPath_;
 }
 
 // reads the Hip Version
@@ -410,6 +415,10 @@ const Variables& HipBinBase::getEnvVariables() const {
   return envVariables_;
 }
 
+// returns envirnoment variables
+const Variables& HipBinBase::getVariables() const {
+  return variables_;
+}
 
 // returns the os information
 const OsType& HipBinBase::getOSInfo() const {
@@ -483,7 +492,7 @@ HipBinCommand HipBinBase::gethipconfigCmd(string argument) {
   vector<string> pathStrs = { "-p", "--path", "-path", "--p" };
   if (hipBinUtilPtr_->checkCmd(pathStrs, argument))
     return path;
-  vector<string> rocmPathStrs = { "-R", "--rocmpath", "-rocmpath", "--R" };
+  vector<string> rocmPathStrs = { "-R", "--rocm-path", "-rocm-path", "--R" };
   if (hipBinUtilPtr_->checkCmd(rocmPathStrs, argument))
     return rocmpath;
   vector<string> cppConfigStrs = { "-C", "--cpp_config",
@@ -521,5 +530,22 @@ HipBinCommand HipBinBase::gethipconfigCmd(string argument) {
   return full;  // default is full. return full if no commands are matched
 }
 
+const  string& HipBinBase::getrocm_pathOption() const {
+  return rocm_pathOption_;
+}
 
+void HipBinBase::setrocm_pathOption(vector<string> argv) {
+  // iterate over command options, looking for ones that override existing Environment Variables.
+  for (unsigned int argcount = 1; argcount < argv.size(); argcount++) {
+    // Save $arg, it can get changed in the loop.
+    string arg = argv.at(argcount);
+
+    size_t foundEquals = arg.find_first_of("=");
+    if (foundEquals != string::npos) {
+      string arg_name = arg.substr(0,foundEquals);
+      if (arg_name == "--rocm-path")
+        rocm_pathOption_ = arg.substr(arg_name.length()+1);
+    }
+  }
+}
 #endif  // SRC_HIPBIN_BASE_H_
