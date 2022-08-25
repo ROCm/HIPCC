@@ -156,8 +156,8 @@ class HipBinUtil {
                     const string& replaceWith) const;
   string replaceRegex(const string& s, regex toReplace,
                       string replaceWith) const;
-  SystemCmdOut exec(const char* cmd, bool printConsole) const;
-  string getTempDir();
+  static SystemCmdOut exec(const char* cmd, bool printConsole);
+  static string getTempDir();
   void deleteTempFiles();
   string mktempFile(string name);
   string trim(string str) const;
@@ -316,7 +316,7 @@ string HipBinUtil::getTempDir() {
 
 // executes the command, returns the status and return string
 SystemCmdOut HipBinUtil::exec(const char* cmd,
-                              bool printConsole = false) const {
+                              bool printConsole = false) {
   SystemCmdOut sysOut;
   try {
     char buffer[128];

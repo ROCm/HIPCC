@@ -49,6 +49,7 @@ THE SOFTWARE.
 # define HIP_COMPILE_CXX_AS_HIP         "HIP_COMPILE_CXX_AS_HIP"
 # define HIPCC_VERBOSE                  "HIPCC_VERBOSE"
 # define HCC_AMDGPU_TARGET              "HCC_AMDGPU_TARGET"
+# define HIP_ENABLE_HIPFB_CACHE         "HIP_ENABLE_HIPFB_CACHE"
 
 # define HIP_BASE_VERSION_MAJOR     "4"
 # define HIP_BASE_VERSION_MINOR     "4"
@@ -157,6 +158,7 @@ struct EnvVariables {
   string hipClangHccCompactModeEnv_ = "";
   string hipCompileCxxAsHipEnv_ = "";
   string hccAmdGpuTargetEnv_ = "";
+  string hipEnableHipfbCache = "";
   friend std::ostream& operator <<(std::ostream& os, const EnvVariables& var) {
     os << "Path: "                           << var.path_ << endl;
     os << "Hip Path: "                       << var.hipPathEnv_ << endl;
@@ -181,6 +183,7 @@ struct EnvVariables {
     os << "Hip Compile Cxx as Hip: "         <<
            var.hipCompileCxxAsHipEnv_ << endl;
     os << "Hcc Amd Gpu Target: "             << var.hccAmdGpuTargetEnv_ << endl;
+    os << "Enable HIP GPU binary cache: "    << var.hipEnableHipfbCache << endl;
     return os;
   }
 };
@@ -317,6 +320,8 @@ void HipBinBase::readEnvVariables() {
     envVariables_.hipClangHccCompactModeEnv_ = hipClangHccCompactMode;
   if (const char* hipCompileCxxAsHip = std::getenv(HIP_COMPILE_CXX_AS_HIP))
     envVariables_.hipCompileCxxAsHipEnv_ = hipCompileCxxAsHip;
+  if (const char* hipEnableHipfbCache = std::getenv(HIP_ENABLE_HIPFB_CACHE))
+    envVariables_.hipEnableHipfbCache = hipEnableHipfbCache;
 }
 
 // constructs the HIP path

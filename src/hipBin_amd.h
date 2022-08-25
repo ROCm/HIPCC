@@ -25,11 +25,20 @@ THE SOFTWARE.
 
 #include "hipBin_base.h"
 #include "hipBin_util.h"
+#include "json.hpp"
 #include <vector>
+#include <set>
 #include <string>
 #include <unordered_set>
 #include <cassert>
 
+#include <fstream>
+#include <sstream>
+#include <chrono>
+#include <sys/stat.h>
+#include <sys/file.h>
+#include <filesystem>
+#include <fcntl.h>
 
 // Use (void) to silent unused warnings.
 #define assertm(exp, msg) assert(((void)msg, exp))
@@ -39,6 +48,82 @@ THE SOFTWARE.
  <std::string> knownFeatures =  { "sramecc-" , "sramecc+",
                                   "xnack-", "xnack+" };
 
+struct HipGpuBinaryCache {
+  const size_t       CACHE_SIZE_LIMIT = 96000000; //0x400000000; // 16 Gb
+  const size_t       SRC_MIN_SIZE     = 0; //0x800;
+  const size_t       SRC_SIZE_LIMIT   = 0x100000;
+  const size_t       CUI_SIZE_LIMIT   = 0x800000;
+  const int          MAX_SUBDIR_NUM   = 9999;
+  const uint32_t     ENTRY_EST_SIZE   = 0x500000; // 5 Mb
+  const uint32_t     DATA_FILES_MASK  = 0x3f; // 64 data files.
+  const std::string  CACHE_DIR_SUFFIX     = ".cache/hip";
+  const std::string  CACHE_DESC_FILE_NAME = "cache.json";
+
+  struct {
+    size_t       size;
+    size_t       modTime;
+    std::string  path;
+    std::string  name;
+  } srcFileInfo;
+
+  struct ENTRY_INFO {
+    enum {
+      FOUND_CACHED,
+      CREATED_NEW_SUBDIR,
+      USED_EMPTY_SUBDIR,
+      EVICTED_OLD_ENTRY
+    } howAdded;
+
+    std::string     subDir;
+    std::string     cachedHipfbName;
+    std::string     dataFileName;
+    //nlohmann::json  jEntry;
+    int             subDirNum;
+  } cacheEntryInfo;
+
+  class FileLock {
+    int f;
+  public:
+    FileLock(const std::string& path, bool excl = false) {
+      if ((f = open(path.c_str(), O_RDONLY)) != -1) { flock(f, excl ? LOCK_EX : LOCK_SH); }
+    }
+    ~FileLock() { release(); }
+    void release() { 
+      if (f != -1) { flock(f, LOCK_UN); close(f); f = -1; }
+    }
+  };
+
+  bool  enabled = false;
+  bool  verbose = false;
+  bool  multTargets = false;
+  std::string     cacheDir;
+  std::string     hipVersion;
+  std::string     clangPath;
+  std::string     clangArgs;
+  nlohmann::json  cacheDesc;
+
+  HipGpuBinaryCache(const std::string& hipVer, bool verb); // : hipVersion(hipVer), verbose(verb);
+  bool findCachedHipfb(std::string& cmd);
+  bool findAvailableEntry();
+  bool preprocessSource(const std::string& srcFileName, std::stringstream& prepText);
+  bool preprocessSourceToFile(const std::string& cmd);
+  void addSaveHipfbOption(std::string& cmd);
+  void addUseHipfbOption(std::string& cmd);
+  bool readCachedPrepSource(const nlohmann::json& jentry, std::stringstream& text);
+  int  evictOldEntries();
+  int  evictEntry(std::pair<uint32_t, uint32_t>& entry, size_t& totalSize);
+  bool updateCacheDescFile(bool releaseLock = true);
+  bool updateFilesPostBuild(bool buildFailed = false);
+  bool updateDataFilesPostBuild(size_t subdirSize, uint32_t& entryID);
+  bool updateCacheDescFilePostBuild(size_t subdirSize, uint32_t entryID, bool buildFailed = false);
+  bool createCacheSubDir();
+  bool cleanUpCache();
+  bool initCache();
+  bool initCacheDescFile();
+  std::string getSubDirName(int subDirNum);
+};
+
+
 class HipBinAmd : public HipBinBase {
  private:
   HipBinUtil* hipBinUtilPtr_;
@@ -46,6 +131,7 @@ class HipBinAmd : public HipBinBase {
   string roccmPathEnv_, hipRocclrPathEnv_, hsaPathEnv_;
   PlatformInfo platformInfoAMD_;
   string hipCFlags_, hipCXXFlags_, hipLdFlags_;
+
   void constructRocclrHomePath();
   void constructHsaPath();
 
@@ -522,7 +608,7 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
   if (!var.verboseEnv_.empty())
     verbose = stoi(var.verboseEnv_);
 
-  // Verbose: 0x1=commands, 0x2=paths, 0x4=hipcc args
+  // Verbose: 0x1=commands, 0x2=paths, 0x4=hipcc args, 0x8=hipfb cache
   // set if user explicitly requests -stdlib=libc++
   // (else we default to libstdc++ for better interop with g++)
   bool setStdLib = 0;
@@ -548,6 +634,7 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
   string hsacoVersion;
   bool funcSupp = 0;      // enable function support
   bool rdc = 0;           // whether -fgpu-rdc is on
+  bool useHipfbCache = 0;
 
   string prevArg;  //  previous argument
   // TODO(hipcc): convert toolArgs to an array rather than a string
@@ -569,6 +656,13 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
     hip_compile_cxx_as_hip = "1";
   } else {
     hip_compile_cxx_as_hip = var.hipCompileCxxAsHipEnv_;
+  }
+
+  HipGpuBinaryCache gpuBinaryCache(getHipVersion(), verbose & 0x8);
+
+  string useHipfbCacheEnv = getEnvVariables().hipEnableHipfbCache;
+  if (!useHipfbCacheEnv.empty() && std::stoi(useHipfbCacheEnv) != 0) {
+    useHipfbCache = true;
   }
 
   string HIPLDARCHFLAGS;
@@ -701,6 +795,10 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
     if ((trimarg == "-use-sharedlib") && (setLinkType == 0)) {
       linkType = 1;
       setLinkType = 1;
+    }
+    if (trimarg == "--clean-cache") {
+      gpuBinaryCache.cleanUpCache();
+      return;
     }
     if (hipBinUtilPtr_->stringRegexMatch(arg, "^-O.*")) {
       optArg = arg;
@@ -969,6 +1067,11 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
     } else if (hasCXX || hasHIP) {
       needCXXFLAGS = 1;
     }
+    gpuBinaryCache.srcFileInfo.path = arg;
+    if (useHipfbCache && hasHIP) {
+      gpuBinaryCache.srcFileInfo.path = arg;
+      gpuBinaryCache.enabled = true;
+    }
     inputs.push_back(arg);
     // print "I: <$arg>\n";
     }
@@ -986,6 +1089,7 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
       toolArgs += " " + arg;
     prevArg = arg;
   }  // end of for loop
+
   // No AMDGPU target specified at commandline. So look for HCC_AMDGPU_TARGET
   if (default_amdgpu_target == 1) {
     if (!var.hccAmdGpuTargetEnv_.empty()) {
@@ -1029,8 +1133,21 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
       if (hasHIP) {
         HIPCXXFLAGS += GPU_ARCH_ARG;
       }
+/* <<<<<<< HEAD
+======= */
+      for (auto it = knownTargets.cbegin(); it != knownTargets.cend(); it++) {
+        if (procName == *it) break;
+        else if (it + 1 == knownTargets.cend())
+          cout << "Warning: The specified HIP target: "<< val <<  " is unknown. Correct compilation is not guaranteed.\n";
+      }
+// >>>>>>> code cache
     }  // end of val != "gfx000"
   }  // end of targets for loop
+
+  if (targets.size() > 1) {
+    gpuBinaryCache.multTargets = true;
+  }
+
   string HCC_EXTRA_LIBRARIES;
   if (hsacoVersion.size() > 0) {
     if (compileOnly == 0) {
@@ -1121,19 +1238,24 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
   string compiler;
   compiler = getHipCC();
   string CMD = compiler;
+  string ALL_ARGS = "";
   if (needCFLAGS) {
-    CMD += " " + HIPCFLAGS;
+    ALL_ARGS += " " + HIPCFLAGS;
   }
 
   if (needCXXFLAGS) {
-    CMD += " " + HIPCXXFLAGS;
+    ALL_ARGS += " " + HIPCXXFLAGS;
   }
 
   if (needLDFLAGS && !compileOnly) {
-    CMD += " " + HIPLDFLAGS;
+    ALL_ARGS += " " + HIPLDFLAGS;
   }
 
-  CMD += " " + toolArgs;
+  ALL_ARGS += " " + toolArgs;
+  gpuBinaryCache.clangPath = compiler;
+  gpuBinaryCache.clangArgs = ALL_ARGS;
+  CMD += ALL_ARGS;
+
   if (verbose & 0x1) {
     cout << "hipcc-cmd: " <<  CMD << "\n";
   }
@@ -1150,16 +1272,831 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
   if (printLDFlags) {
     cout << HIPLDFLAGS;
   }
+
   if (runCmd) {
     SystemCmdOut sysOut;
+    bool useCachedHipfb = false;
+    bool updatedCache = false;
+
+    // try using cached hipfb binary.
+    if (gpuBinaryCache.enabled) {
+      useCachedHipfb = gpuBinaryCache.findCachedHipfb(CMD);
+      // If required hipfb is not found in the cache, find next available cache entry
+      // to save the new generated hipfb.
+      if (useCachedHipfb) {
+        gpuBinaryCache.addUseHipfbOption(CMD);
+      }
+      else {
+        if (gpuBinaryCache.findAvailableEntry()) {
+          if (gpuBinaryCache.preprocessSourceToFile(CMD)) {
+            gpuBinaryCache.addSaveHipfbOption(CMD);
+            updatedCache = true;
+          }
+        }
+      }
+    }
+
+    //std::cout << "Started build for " << gpuBinaryCache.srcFileInfo.path << std::endl;
+
     sysOut = hipBinUtilPtr_->exec(CMD.c_str(), true);
     string cmdOut = sysOut.out;
     int CMD_EXIT_CODE = sysOut.exitCode;
+/** <<<<<<< HEAD
     if (CMD_EXIT_CODE !=0) {
       cout <<  "failed to execute:"  << CMD << std::endl;
+======= */
+
+    //std::cout << "Finished build for " << gpuBinaryCache.srcFileInfo.path << std::endl;
+
+    if (updatedCache) {
+      gpuBinaryCache.updateFilesPostBuild(CMD_EXIT_CODE != 0);
+    }
+
+    if (CMD_EXIT_CODE == -1) {
+      cout <<  "failed to execute: $!\n";
+    } else if (CMD_EXIT_CODE & 127) {
+      string childOut;
+      int childCode;
+      (CMD_EXIT_CODE & 127),  (CMD_EXIT_CODE & 128) ?
+              childOut = "with" : childOut = "without";
+      (CMD_EXIT_CODE & 127),  (CMD_EXIT_CODE & 128) ?
+              childCode = (CMD_EXIT_CODE & 127) :
+              childCode = (CMD_EXIT_CODE & 128);
+      cout <<  "child died with signal " << childCode << "," << childOut <<
+                          " coredump "<< " for cmd: " << CMD << endl;
+    } else {
+      CMD_EXIT_CODE = CMD_EXIT_CODE >> 8;
+// >>>>>>> code cache
     }
     exit(CMD_EXIT_CODE);
   }  // end of runCmd section
 }   // end of function
+
+HipGpuBinaryCache::HipGpuBinaryCache(const std::string& hipVer, bool verb)
+  : hipVersion(hipVer), verbose(verb)
+{
+    const char* homedir;
+    if ((homedir = getenv("HOME")) != NULL) {
+      cacheDir = std::string(homedir) + "/" + CACHE_DIR_SUFFIX;
+    }
+}
+
+bool HipGpuBinaryCache::findCachedHipfb(std::string& cmd)
+{
+    //std::cout << "Entering findCachedHipfb() for " << srcFileInfo.path << std::endl;
+    auto pos = srcFileInfo.path.rfind('/');
+    srcFileInfo.name = srcFileInfo.path.substr(pos == std::string::npos ? 0 : pos + 1);
+
+    // The cache data file is named "<N>.json", where
+    // N = (size of cource file & DATA_FILES_MASK).
+    struct stat stat_buf;
+    int rc = stat(srcFileInfo.path.c_str(), &stat_buf);
+    if (rc == -1)
+      return false;
+    else {
+      srcFileInfo.size = stat_buf.st_size;
+      srcFileInfo.modTime = stat_buf.st_mtim.tv_sec;
+    }
+/*
+    if (srcFileInfo.size > SRC_SIZE_LIMIT) {
+      if (verbose) {
+        std::cout << "[HIPFB CACHE] ... Not using cache for " << srcFileInfo.name <<
+                     " : Source file size limit exceeded." << std::endl;
+      }
+      return false;
+    }
+*/
+    int dataFileNum = srcFileInfo.size & DATA_FILES_MASK;
+
+    // Open, lock and parse the cache data file if it exists.
+    if (cacheDir.empty()) {
+      //std::cout << "Leaving findCachedHipfb() [cache dir empty] for " << srcFileInfo.name << std::endl;
+      return false;
+    }
+
+    std::string dataFilePath = cacheDir + "/" + std::to_string(dataFileNum) + ".json";
+
+    //std::cout << "findCachedHipfb(): Trying SH lock for " << srcFileInfo.name << std::endl;
+    FileLock fl(dataFilePath.c_str());
+    //std::cout << "findCachedHipfb(): Acquired SH lock for " << srcFileInfo.name << std::endl;
+
+    std::ifstream dataFile(dataFilePath);
+    if (!dataFile.is_open()) {
+      //std::cout << "findCachedHipfb(): Released SH lock for " << srcFileInfo.name << std::endl;
+      //std::cout << "Leaving findCachedHipfb() [no data file] for " << srcFileInfo.name << std::endl;
+      return false;
+    }
+
+    // std::cout << "Reading data file in findCachedHipfb : " << dataFilePath << 
+    //              " for src file " << srcFileInfo.name << std::endl;
+    nlohmann::json jdata;
+    dataFile >> jdata;
+    dataFile.close();
+    fl.release();
+    //std::cout << std::setw(4) << jdata << std::endl;
+    //std::cout << "findCachedHipfb(): Released SH lock for " << srcFileInfo.name << std::endl;
+
+    // Try to find entries that could match the source file.
+    // 1. Perform the "fast" check: compare the source file name, size & modification time
+    //    and the rocm (HIP) version.
+    std::set<nlohmann::json> matchingEntries;
+    for (auto &j : jdata) {
+      if (/*j.contains("source_size") &&*/ srcFileInfo.size == j["source_size"] &&
+          /*j.contains("source_mod_time") && srcFileInfo.modTime == j["source_mod_time"] && */
+          /*j.contains("source_name") &&*/ srcFileInfo.name == j["source_name"] &&
+          /*j.contains("hip_version") &&*/ hipVersion == j["hip_version"]) {
+        matchingEntries.insert(j);
+      }
+    }
+
+    if (matchingEntries.empty()) {
+      //std::cout << "Leaving findCachedHipfb() [no matching entry] for " << srcFileInfo.name << std::endl;
+      return false;
+    }
+
+    // 2. Check the clang arguments.
+    for (auto it = matchingEntries.begin(); it != matchingEntries.end(); ) {
+      if (clangArgs != (*it)["clang_options"])
+        it = matchingEntries.erase(it);
+      else
+        it++;
+    }
+
+    if (matchingEntries.empty()) {
+      //std::cout << "Leaving findCachedHipfb() [no matching entry] for " << srcFileInfo.name << std::endl;
+      return false;
+    }
+
+    // 3. Now perform the "heaviest" check of the remaining potentially matching
+    //    cache entries: compare the size and content of preprocessed source files.
+    nlohmann::json matchingEntry = nullptr;
+
+    for (auto &jentry : matchingEntries) {
+      std::stringstream prepText, cachedPrepText;
+      std::string s1, s2;
+      bool match = true;
+
+      if (!preprocessSource(srcFileInfo.name, prepText))
+        continue;
+      if (!readCachedPrepSource(jentry, cachedPrepText))
+        continue;
+
+      prepText.seekg(0, std::ios::end);
+      size_t prepSize = prepText.tellg();
+      cachedPrepText.seekg(0, std::ios::end);
+      size_t cachedSize = cachedPrepText.tellg();
+      if (prepSize != cachedSize)
+        continue;
+      prepText.seekg(0, std::ios::beg);
+      cachedPrepText.seekg(0, std::ios::beg);
+      
+      while (std::getline(prepText, s1) && std::getline(cachedPrepText, s2)) {
+        if (s1 != s2) {
+          match = false;
+          break;
+        }
+      }
+
+      if (match){
+        matchingEntry = jentry;
+        break;
+      }
+    }
+
+    if (matchingEntry.empty()) {
+      //std::cout << "Leaving findCachedHipfb() [no matching entry] for " << srcFileInfo.name << std::endl;
+      return false;
+    }
+
+    // Found a matching cache entry -- modify the clang command line
+    // to make clang use cached hipfb instead of building the Device part of the source.
+    cacheEntryInfo.cachedHipfbName = matchingEntry["cached_hipfb"];
+    cacheEntryInfo.subDir = matchingEntry["cache_subdir"];
+    cacheEntryInfo.howAdded = ENTRY_INFO::FOUND_CACHED;
+
+    //std::cout << "Leaving findCachedHipfb() [found cached entry] for " << srcFileInfo.name << std::endl;
+
+    return true;
+}
+
+bool HipGpuBinaryCache::preprocessSource(const std::string& srcFileName, std::stringstream& prepText)
+{
+  std::string tmpDir = HipBinUtil::getTempDir();
+  std::string cuiFilePath = tmpDir + "/" + srcFileName + ".cui";
+
+  std::string clangCmd = clangPath;
+
+  // Preprocessor does not accept multiple targets, so remove all targets except the 1st one.
+  if (multTargets) {
+    std::string singleTargetArgs, arg;
+    std::istringstream iss(clangArgs);
+    bool addedTarget = false;
+    while (std::getline(iss, arg, ' ')) {
+      if (arg.find("--offload-arch") != std::string::npos) {
+        if (!addedTarget) {
+          singleTargetArgs += (arg + " ");
+          addedTarget = true;
+        }
+      }
+      else {
+          singleTargetArgs += (arg + " ");
+      }
+    }
+    clangCmd += (" " + singleTargetArgs);
+  } else {
+    clangCmd += (" " + clangArgs);
+  }
+
+  clangCmd += (" -E --cuda-device-only -o " + cuiFilePath);
+
+  auto status = HipBinUtil::exec(clangCmd.c_str());
+  if (status.exitCode != 0) return false;
+
+  // Check if size of the generated .cui file exceeds the limit.
+  struct stat stat_buf;
+  int rc = stat(cuiFilePath.c_str(), &stat_buf);
+  if (rc == -1) return false;
+
+/*  
+  if (stat_buf.st_size > CUI_SIZE_LIMIT) {
+    if (verbose) {
+      std::cout << "[HIPFB CACHE] ... Not using cache for " << srcFileInfo.name <<
+                   " : cui file size limit exceeded." << std::endl;
+    }
+    return false;
+  }
+*/
+
+  std::ifstream cuiFile(cuiFilePath);
+  if (cuiFile.is_open()) {
+    prepText << cuiFile.rdbuf();
+    fs::remove(cuiFilePath);
+    return true;
+  }
+
+  return false;
+}
+
+bool HipGpuBinaryCache::preprocessSourceToFile(const std::string& cmd)
+{
+    //std::cout << "Started preprocessing for " << srcFileInfo.name << std::endl;
+
+    std::string cuiFilePath = cacheDir + "/" + cacheEntryInfo.subDir + "/" + srcFileInfo.name + ".cui";
+
+    std::string prepCmd, arg;
+    std::istringstream iss(cmd);
+
+    // Preprocessor does not accept multiple targets, so remove all targets except the 1st one.
+    if (!multTargets) {
+      while (std::getline(iss, arg, ' ')) {
+        prepCmd += (arg + " ");
+        if (arg == "-o") {
+          prepCmd += (cuiFilePath + " -E --cuda-device-only ");
+          std::getline(iss, arg, ' ');
+        }
+      }
+    }
+    else {
+      bool addedTarget = false;
+      while (std::getline(iss, arg, ' ')) {
+        if (arg == "-o") {
+          // Replace the output file path in the clang command line.
+          prepCmd += (arg + " " + cuiFilePath + " -E --cuda-device-only ");
+          std::getline(iss, arg, ' ');
+        }
+        else if (arg.find("--offload-arch") != std::string::npos) {
+          if (!addedTarget) {
+            // Add only one target.
+            prepCmd += (arg + " ");
+            addedTarget = true;
+          }
+        }
+        else {
+          prepCmd += (arg + " ");
+        }
+      }
+    }
+
+    auto status = HipBinUtil::exec(prepCmd.c_str());
+    if (status.exitCode != 0) return false;
+
+    //std::cout << "Finished preprocessing for " << srcFileInfo.name << std::endl;
+
+    return true;
+}
+
+bool HipGpuBinaryCache::readCachedPrepSource(const nlohmann::json& jentry, std::stringstream& text)
+{
+  std::string cacheSubdir = jentry["cache_subdir"];
+  std::string cachedCuiPath = cacheDir + "/" + cacheSubdir + "/";
+  cachedCuiPath += jentry["cached_cui"];
+  std::ifstream cachedCuiFile(cachedCuiPath);
+  if (cachedCuiFile.is_open()) {
+    text << cachedCuiFile.rdbuf();
+    return true;
+  }
+
+  return false;
+}
+
+bool HipGpuBinaryCache::findAvailableEntry()
+{
+  // If cache directory or cache description file does not exist, create them.
+  struct stat info;
+  std::string cacheFilePath = cacheDir + "/" + CACHE_DESC_FILE_NAME;
+  std::ifstream cacheFile(cacheFilePath);
+
+  //std::cout << "Entering findAvailableEntry() for " << srcFileInfo.name << std::endl;
+
+  if(stat(cacheDir.c_str(), &info) != 0 || !(info.st_mode & S_IFDIR) ||
+   !cacheFile.is_open()) {
+    if (initCache()) {
+      cacheFile.open(cacheFilePath);
+    }
+    else {
+      std::cout << "[HIPFB CACHE] !!! Failed to initialize HIPFB cache." << std::endl;
+      return false;
+    }
+  }
+
+  // Lock, read and parse the cache description file
+  //std::cout << "findAvailableEntry(): Trying EX lock for " << srcFileInfo.name << std::endl;
+  FileLock fl(cacheFilePath, true);
+  //std::cout << "findAvailableEntry(): Acquired EX lock for " << srcFileInfo.name << std::endl;
+  //std::cout << "Reading cache desc file for " << srcFileInfo.name << std::endl;
+  cacheFile >> cacheDesc;
+  std::cout << std::setw(4) << cacheDesc << std::endl;
+  cacheFile.close();
+  //std::cout << "findAvailableEntry(): Read cache desc for " << srcFileInfo.name << std::endl;
+
+  size_t cacheTotalSize = cacheDesc["total_size"];
+  int topSubDirNum = cacheDesc["top_subdir"];
+  bool found = false;
+
+  // If there are available (empty) sub-folders and the total cache size
+  // does not exceed the limit, use the first available sub-folder.
+  if (cacheTotalSize + ENTRY_EST_SIZE < CACHE_SIZE_LIMIT) {
+    // First, try to find an empty sub-directory.
+    nlohmann::json &emptySlots = cacheDesc["empty_subdirs"];
+    nlohmann::json pendingSubDirs = cacheDesc["pending_subdirs"];
+    if (!emptySlots.empty()) {
+      // Get the 1st available empty slot which is not in the list of pending slots.
+      size_t emptySlotsNum = emptySlots.size();
+      for (int i = 0; i < emptySlotsNum; i++) {
+        if (!pendingSubDirs.contains(emptySlots[i])) {
+          cacheEntryInfo.subDirNum = emptySlots[i];
+          cacheEntryInfo.subDir = getSubDirName(cacheEntryInfo.subDirNum);
+          emptySlots.erase(i);
+          cacheEntryInfo.howAdded = ENTRY_INFO::USED_EMPTY_SUBDIR;
+          found = true;
+          //std::cout << "findAvailableEntry() [using empty subdir] for " << srcFileInfo.name << std::endl;
+          break;
+        }
+      }
+    }
+    if (!found && topSubDirNum < MAX_SUBDIR_NUM) {
+      // If there are sub-directories that have not been used yet, use the 1st available.
+      int dirNum = topSubDirNum;
+      std::vector<int> pendingDirNums = pendingSubDirs;      
+      while (++dirNum <= MAX_SUBDIR_NUM) {
+        bool dirIsInPendingList = false;
+        for (int pndDir : pendingDirNums) {
+          if (pndDir == dirNum) {
+            dirIsInPendingList = true;
+            break;
+          }
+        }
+        if (!dirIsInPendingList) {
+          cacheEntryInfo.subDirNum = dirNum;
+          cacheEntryInfo.subDir = getSubDirName(cacheEntryInfo.subDirNum);
+          found = createCacheSubDir();
+          if (found) {
+            cacheEntryInfo.howAdded = ENTRY_INFO::CREATED_NEW_SUBDIR;
+            //std::cout << "[Created new subdir]: " << dirNum <<  " for " << srcFileInfo.name << std::endl;
+            break; // Exit from "while (dirNum <= MAX_SUBDIR_NUM)"
+          }
+        }
+      }
+    }
+  }
+
+  if (!found) {
+    // There are no available subfolders or the max cache size is exceeded.
+    // Evict the oldest cache entry (or multiple entries if necessary).
+    cacheEntryInfo.subDirNum = evictOldEntries();
+    if (cacheEntryInfo.subDirNum != -1) {
+        cacheEntryInfo.subDir = getSubDirName(cacheEntryInfo.subDirNum);
+        cacheEntryInfo.howAdded = ENTRY_INFO::EVICTED_OLD_ENTRY;
+        found = true;
+    }
+  }
+
+  if (found) {
+    // Add found sub-dir to the list of "pending" ones so that other hipcc processes
+    // do not try to use it. Write updated data to the cache desc file.
+    if (cacheEntryInfo.howAdded != ENTRY_INFO::EVICTED_OLD_ENTRY) {
+      cacheDesc["pending_subdirs"].push_back(cacheEntryInfo.subDirNum);
+    }
+    updateCacheDescFile();
+    //std::cout << "findAvailableEntry() [added pending subdir] for " << srcFileInfo.name << std::endl;
+  }
+
+  //std::cout << "findAvailableEntry(): Released EX lock for " << srcFileInfo.name << std::endl;
+  //std::cout << "Leaving findAvailableEntry() for " << srcFileInfo.name << std::endl;
+  return found;
+}
+
+bool HipGpuBinaryCache::createCacheSubDir()
+{
+  if (cacheEntryInfo.subDir.empty()) {
+    cacheEntryInfo.subDir = getSubDirName(cacheEntryInfo.subDirNum);
+  }
+
+  // Create a cache sub-directory if it does not exist.
+  struct stat info;
+  std::string subDirPath = cacheDir + "/" + cacheEntryInfo.subDir;
+  if(stat(subDirPath.c_str(), &info) != 0 || !(info.st_mode & S_IFDIR)) {
+    // TODO: Move creating a directory to the hipBin_util.h.
+    int ret = mkdir(subDirPath.c_str(), S_IRWXU);
+    return (ret == 0);
+  }
+
+  return true;
+}
+
+void HipGpuBinaryCache::addSaveHipfbOption(std::string& cmd)
+{
+  std::string hipfbFilePath = cacheDir + "/" + cacheEntryInfo.subDir + "/" + srcFileInfo.name + ".hipfb";
+  cmd += (" --save-hipfb=" + hipfbFilePath);
+}
+
+bool HipGpuBinaryCache::updateFilesPostBuild(bool buildFailed)
+{
+  bool result = true;
+  uint32_t entryID = 0;
+  size_t hipfbFileSize, cuiFileSize;
+  std::string cacheSubDirPath = cacheDir + "/" + cacheEntryInfo.subDir + "/";
+  std::string hipfbFilePath = cacheSubDirPath + srcFileInfo.name + ".hipfb";
+  std::string cuiFilePath = cacheSubDirPath + srcFileInfo.name + ".cui";
+  struct stat stat_buf;
+
+  if (stat(hipfbFilePath.c_str(), &stat_buf) == -1)
+    return false;
+  else
+    hipfbFileSize = stat_buf.st_size;
+  if (stat(cuiFilePath.c_str(), &stat_buf) == -1)
+    return false;
+  else
+    cuiFileSize = stat_buf.st_size;
+
+  if (!buildFailed) {
+    result = updateDataFilesPostBuild(cuiFileSize + hipfbFileSize, entryID);
+  }
+
+  if (result) {
+    result = updateCacheDescFilePostBuild(cuiFileSize + hipfbFileSize, entryID, buildFailed);
+  }
+
+  return result;
+}
+
+bool HipGpuBinaryCache::updateDataFilesPostBuild(size_t subdirSize, uint32_t& entryID)
+{
+  int dataFileNum = srcFileInfo.size & DATA_FILES_MASK;
+  std::string dataFileName = std::to_string(dataFileNum) + ".json";
+  std::string dataFilePath = cacheDir + "/" + dataFileName;
+
+  //std::cout << "Entering updateDataFilesPostBuild() for " << srcFileInfo.name << std::endl;
+
+  // Lock and read the cache description file
+  //std::cout << "updateDataFilesPostBuild(): Trying EX lock for " << srcFileInfo.name << std::endl;
+  FileLock fl(cacheDir + "/" + CACHE_DESC_FILE_NAME, true);
+  //std::cout << "updateDataFilesPostBuild(): Acquired EX lock for " << srcFileInfo.name << std::endl;
+  std::string cacheFilePath = cacheDir + "/" + CACHE_DESC_FILE_NAME;
+  std::ifstream cacheFile(cacheFilePath);
+  if (cacheFile.is_open()) {
+    //std::cout << "updateDataFilesPostBuild() [Reading cache desc file] for " << srcFileInfo.name << std::endl;
+    cacheFile >> cacheDesc;
+    cacheFile.close();
+    //std::cout << std::setw(4) << cacheDesc << std::endl;
+    //std::cout << "updateDataFilesPostBuild() [Read cache desc file] for " << srcFileInfo.name << std::endl;
+  }
+
+  std::ifstream dataFile(dataFilePath);
+  nlohmann::json entries;
+  if (dataFile.is_open()) {
+    // std::cout << "updateDataFilesPostBuild() Reading data file: " << dataFileNum << 
+    //              " for " << srcFileInfo.name << std::endl;
+    dataFile >> entries;
+    dataFile.close();
+    //std::cout << std::setw(4) << entries << std::endl;
+  }
+
+  //std::cout << "updateDataFilesPostBuild() [Read data file] for " << srcFileInfo.name << std::endl;
+
+  // Open the data file containing the old "newest entry".
+  // Link new entry to the previous "newest" entry.
+  nlohmann::json oldNewest = cacheDesc["newest_entry"];
+  uint32_t oldNewestDataFileNum = oldNewest.empty() ? 0 : (uint32_t) oldNewest[0];
+  uint32_t oldNewestEntryNum = oldNewest.empty() ? 0 : (uint32_t) oldNewest[1];
+  entryID = entries.size();
+
+  if (!oldNewest.empty()) {
+    if (oldNewestDataFileNum == dataFileNum) {
+      nlohmann::json &oldNewestEntry = entries[oldNewestEntryNum];
+      oldNewestEntry["next_entry"] = { dataFileNum, entryID };
+    }
+    else {
+      nlohmann::json oldData;
+      std::string oldDataFilePath = cacheDir + "/" + std::to_string(oldNewestDataFileNum) + ".json";
+      std::ifstream oldDataFile(oldDataFilePath);
+      if (oldDataFile.is_open()) {
+        // std::cout << "updateDataFilesPostBuild() Reading old data file: " << oldNewestDataFileNum << 
+        //              " for " << srcFileInfo.name << std::endl;
+        oldDataFile >> oldData;
+        oldDataFile.close();
+        //std::cout << std::setw(4) << oldData << std::endl;
+      }
+
+      nlohmann::json &oldNewestEntry = oldData[oldNewestEntryNum];
+      oldNewestEntry["next_entry"] = { dataFileNum, entryID };
+
+      std::ofstream oldDataFileW(oldDataFilePath, std::ios::trunc);
+      if (oldDataFileW.is_open()) {
+        // std::cout << "updateDataFilesPostBuild() Updating old data file: " << oldNewestDataFileNum << 
+        //              " for " << srcFileInfo.name << std::endl;
+        oldDataFileW << std::setw(4) << oldData << std::endl;
+        oldDataFileW.close();
+        //std::cout << std::setw(4) << oldData << std::endl;
+      }
+    }
+  }
+
+  //std::cout << "updateDataFilesPostBuild() [Updated old data file] for " << srcFileInfo.name << std::endl;
+
+  // Add new entry descriptor to the corresponding cache data file.
+  nlohmann::json jentry;
+
+  jentry["_ID_"]            = entries.size();
+  jentry["source_name"]     = srcFileInfo.name;
+  jentry["source_mod_time"] = srcFileInfo.modTime;
+  jentry["source_size"]     = srcFileInfo.size;
+  jentry["clang_options"]   = clangArgs;
+  jentry["hip_version"]     = hipVersion;
+  jentry["cache_subdir"]    = cacheEntryInfo.subDir;
+  jentry["cached_cui"]      = srcFileInfo.name + ".cui";
+  jentry["cached_hipfb"]    = srcFileInfo.name + ".hipfb";
+  jentry["next_entry"]      = nlohmann::json::array();
+  jentry["subdir_size"]     = subdirSize;
+
+  // Add new entry to the data file.
+  entries.push_back(jentry);
+
+  // Write the data file.
+  std::ofstream dataFileW(dataFilePath, std::ios::trunc);
+  if (dataFileW.is_open()) {
+      // std::cout << "updateDataFilesPostBuild() Updating data file: " << dataFileNum << 
+      //              " for " << srcFileInfo.name << std::endl;
+    dataFileW << std::setw(4) << entries << std::endl;
+    dataFileW.close();
+    //std::cout << std::setw(4) << entries << std::endl;
+  }
+
+  return true;
+}
+
+bool HipGpuBinaryCache::updateCacheDescFilePostBuild(size_t subdirSize, uint32_t entryID, bool buildFailed)
+{
+  // Update the cache desc file.
+  size_t totalSize = cacheDesc["total_size"];
+  totalSize += subdirSize;
+  cacheDesc["total_size"] = totalSize;
+
+  // Remove new entry from the "pending" list and update the cache description
+  // according to the way the entry was added.
+  nlohmann::json& pendingSubdirs = cacheDesc["pending_subdirs"];
+  for (int i = 0; i < pendingSubdirs.size(); i++) {
+    if (pendingSubdirs[i] == cacheEntryInfo.subDirNum) {
+      pendingSubdirs.erase(i);
+      break;
+    }
+  }
+
+  // If the compilation has failed, just delete all possibly remaining files
+  // and add the current cache sub-directory to the list of empty entries.
+  if (buildFailed) {
+    const std::string cacheSubDirPath = cacheDir + "/" + cacheEntryInfo.subDir;
+    for (const auto& entry : fs::directory_iterator(cacheSubDirPath)) {
+      fs::remove(entry.path());
+    }
+
+    nlohmann::json &emptySubdirs = cacheDesc["empty_subdirs"];
+    emptySubdirs.push_back(cacheEntryInfo.subDirNum);
+    updateCacheDescFile();
+
+    return true;
+  }
+
+  int dataFileNum = srcFileInfo.size & DATA_FILES_MASK;
+  if (cacheDesc["newest_entry"].empty()) {
+    cacheDesc["oldest_entry"] = { dataFileNum, entryID };
+  }
+  cacheDesc["newest_entry"] = { dataFileNum, entryID };
+
+  //std::cout << std::setw(4) << cacheDesc << std::endl;
+
+  if (cacheEntryInfo.howAdded == ENTRY_INFO::CREATED_NEW_SUBDIR) {
+    int topSubdir = cacheDesc["top_subdir"];
+    if (cacheEntryInfo.subDirNum > topSubdir) {
+      cacheDesc["top_subdir"] = cacheEntryInfo.subDirNum;
+    }
+  }
+  else if (cacheEntryInfo.howAdded == ENTRY_INFO::USED_EMPTY_SUBDIR) {
+    nlohmann::json& emptySubdirs = cacheDesc["empty_subdirs"];
+    for (int i = 0; i < emptySubdirs.size(); i++) {
+      if (emptySubdirs[i] == cacheEntryInfo.subDirNum) {
+        emptySubdirs.erase(i);
+        break;
+      }
+    }
+  }
+
+  // Re-write the cache description file.
+  updateCacheDescFile();
+
+  if (verbose) {
+    std::cout << "[HIPFB CACHE] >>> Cached hipfb for " << srcFileInfo.name <<
+                 " to cache subfolder: " << cacheEntryInfo.subDir << std::endl;
+  }
+
+  //std::cout << "updateDataFilesPostBuild() [Updated cache desc file] for " << srcFileInfo.name << std::endl;
+  //std::cout << "updateDataFilesPostBuild(): Released EX lock for " << srcFileInfo.name << std::endl;
+
+  return true;
+}
+
+std::string HipGpuBinaryCache::getSubDirName(int subDirNum)
+{
+  std::string dirName;
+  // Add leading zeros to the subdir name.
+  int m = (MAX_SUBDIR_NUM < 100 ? 100 : (MAX_SUBDIR_NUM < 1000 ? 1000 : 
+           (MAX_SUBDIR_NUM < 10000 ? 10000 : (MAX_SUBDIR_NUM < 100000 ? 10000 : 100000))));
+  while ((m /= 10) > subDirNum) dirName += "0";
+  if (subDirNum > 0) dirName += std::to_string(subDirNum);  
+
+  return dirName;
+}
+
+int HipGpuBinaryCache::evictOldEntries()
+{
+  // In the cache description file, the entries are listed in the date of creation order.
+  // So, first entries are the oldest.
+  int firstEvicted = -1;
+  int numEvictedEntries = 0;
+
+  size_t totalSize = cacheDesc["total_size"];
+  nlohmann::json &emptySubdirs = cacheDesc["empty_subdirs"];
+  nlohmann::json &oldestEntry = cacheDesc["oldest_entry"];
+
+  if (oldestEntry.size() < 2) return -1;
+
+  std::pair<uint32_t, uint32_t> entry = {oldestEntry[0], oldestEntry[1]};
+  bool stop = false;
+
+  for (int i=0; !stop; i++) {
+    int evictedDir = evictEntry(entry, totalSize);
+    oldestEntry = {std::get<0>(entry), std::get<1>(entry)};
+    if (i == 0) {
+      firstEvicted = evictedDir;
+    }
+    else {
+      emptySubdirs.push_back(evictedDir);
+    }
+    stop = (totalSize + ENTRY_EST_SIZE < CACHE_SIZE_LIMIT);
+  }
+
+  cacheDesc["total_size"] = totalSize;
+
+  //updateCacheDescFile();
+
+  return firstEvicted;
+}
+
+int HipGpuBinaryCache::evictEntry(std::pair<uint32_t, uint32_t>& entry, size_t& totalSize)
+{
+  // Open the data file and find the required entry.
+  std::string dataFilePath = cacheDir + "/" + std::to_string(std::get<0>(entry)) + ".json";
+  std::ifstream dataFile(dataFilePath);
+  if (!dataFile.is_open()) return false;
+
+  nlohmann::json data;
+  std::string cuiFileName, hipfbFileName;
+  dataFile >> data;
+  dataFile.close();
+
+  nlohmann::json jentry = data[std::get<1>(entry)];
+
+  cuiFileName = jentry["cached_cui"];
+  hipfbFileName = jentry["cached_hipfb"];
+  std::string subDir = jentry["cache_subdir"];
+  int subDirNum = std::stoi(subDir);
+
+  // Remove cached files from the sub-folder.
+  std::string subFolderPath = cacheDir + "/" + subDir + "/";
+  std::remove((subFolderPath + cuiFileName).c_str());
+  std::remove((subFolderPath + hipfbFileName).c_str());
+
+  // Remove the entry from the data file.
+  data.erase(std::get<1>(entry));
+
+  // Update the "entry" and "totalSize" argument.
+  nlohmann::json next = jentry["next_entry"];
+  entry = {next[0], next[1]};
+  totalSize -= (size_t) jentry["subdir_size"];
+
+  // Rewrite the data file.
+  std::ofstream dataFileW(dataFilePath, std::ios::trunc);
+  if (!dataFileW.is_open()) return -1;
+  dataFileW << std::setw(4) << data << std::endl;
+  dataFileW.close();
+
+  // Invalidate the loaded data file since it could be affected by the eviction.
+  //entryData.clear();
+
+  return subDirNum;
+}
+
+void HipGpuBinaryCache::addUseHipfbOption(std::string& cmd)
+{
+    std::string hipfbPath = cacheDir + "/" + cacheEntryInfo.subDir + "/" + cacheEntryInfo.cachedHipfbName;
+    cmd += (" --cuda-host-only --use-hipfb=" + hipfbPath);
+    if (verbose) {
+      std::cout << "[HIPFB CACHE] <<< Using cached hipfb for " << srcFileInfo.name <<
+                   " from cache subfolder: " << cacheEntryInfo.subDir << std::endl;
+    }
+}
+
+bool HipGpuBinaryCache::updateCacheDescFile(bool releaseLock)
+{
+  // Rewrite the cache description size.
+  std::ofstream cacheDescFile(cacheDir + "/" + CACHE_DESC_FILE_NAME, std::ios::trunc);
+  if (!cacheDescFile.is_open()) return false;
+
+  //std::cout << "Updating cache desc file for " << srcFileInfo.name << std::endl;
+
+  cacheDescFile << std::setw(4) << cacheDesc;
+  cacheDescFile.close();
+
+  //std::cout << std::setw(4) << cacheDesc << std::endl;
+
+  return true;
+}
+
+bool HipGpuBinaryCache::initCacheDescFile() 
+{
+  std::ofstream cacheDescFile(cacheDir + "/" + CACHE_DESC_FILE_NAME, std::ios::trunc);
+  if (!cacheDescFile.is_open()) return false;
+
+  cacheDesc["empty_subdirs"] = nlohmann::json::array();
+  cacheDesc["pending_subdirs"] = nlohmann::json::array();
+  cacheDesc["top_subdir"] = -1;
+  cacheDesc["total_size"] = 0;
+  cacheDesc["oldest_entry"] = nlohmann::json::array();
+  cacheDesc["newest_entry"] = nlohmann::json::array();
+
+  cacheDescFile << std::setw(4) << cacheDesc;
+  cacheDescFile.close();
+
+  return true;
+}
+
+bool HipGpuBinaryCache::initCache()
+{
+  struct stat info;
+  if (stat(cacheDir.c_str(), &info) != 0 || !(info.st_mode & S_IFDIR)) {
+    // TODO: Move creating a directory to the hipBin_util.h.
+    int ret = mkdir(cacheDir.c_str(), S_IRWXU);
+    if (ret != 0) return false;
+  }
+
+  return initCacheDescFile();
+}
+
+bool HipGpuBinaryCache::cleanUpCache()
+{
+  if (cacheDir.empty()) return false;
+
+  std::ifstream cacheDescFileR(cacheDir + "/" + CACHE_DESC_FILE_NAME);
+  if (!cacheDescFileR.is_open()) return false;
+  cacheDescFileR >> cacheDesc;
+  cacheDescFileR.close();
+
+  // Delete the content of the cache directory.
+  for (const auto& entry : fs::directory_iterator(cacheDir)) {
+    fs::remove_all(entry.path());
+  }
+
+  return initCacheDescFile();
+}
 
 #endif  // SRC_HIPBIN_AMD_H_
