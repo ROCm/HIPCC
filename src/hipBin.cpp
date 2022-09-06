@@ -30,6 +30,7 @@ class HipBinUtil;
 class HipBinBase;
 class HipBinAmd;
 class HipBinNvidia;
+class HipBinSpirv;
 class HipBin;
 
 
@@ -40,6 +41,7 @@ class HipBin {
   vector<PlatformInfo> platformVec_;
   HipBinBase* hipBinNVPtr_;
   HipBinBase* hipBinAMDPtr_;
+  HipBinBase* hipBinSPIRVPtr_;
 
  public:
   HipBin();
@@ -59,6 +61,7 @@ HipBin::HipBin() {
   hipBinUtilPtr_ = hipBinUtilPtr_->getInstance();
   hipBinNVPtr_ = new HipBinNvidia();
   hipBinAMDPtr_ = new HipBinAmd();
+  hipBinSPIRVPtr_ = new HipBinSpirv();
   bool platformDetected = false;
   if (hipBinAMDPtr_->detectPlatform()) {
     // populates the struct with AMD info

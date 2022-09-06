@@ -59,6 +59,7 @@ THE SOFTWARE.
 enum PlatformType {
   amd = 0,
   nvidia,
+  spirv
   // add new platform types to be added here
 };
 
@@ -68,6 +69,8 @@ string PlatformTypeStr(PlatformType platform) {
     return "amd";
   case nvidia:
     return "nvidia";
+  case spirv:
+    return "spirv";
   // add new platform types to be added here
   default:
     return "invalid platform";
@@ -96,7 +99,8 @@ string CompilerTypeStr(CompilerType compiler) {
 
 enum RuntimeType {
   rocclr = 0,
-  cuda
+  cuda,
+  spirv
   // add new runtime types to be added here
 };
 
@@ -106,6 +110,8 @@ string RuntimeTypeStr(RuntimeType runtime) {
     return "rocclr";
   case cuda:
     return "cuda";
+  case spirv:
+    return "spirv";
   // add new runtime types to be added here
   default:
     return "invalid RuntimeType";
