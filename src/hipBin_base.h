@@ -59,7 +59,7 @@ THE SOFTWARE.
 enum PlatformType {
   amd = 0,
   nvidia,
-  spirv
+  intel
   // add new platform types to be added here
 };
 
@@ -69,8 +69,8 @@ string PlatformTypeStr(PlatformType platform) {
     return "amd";
   case nvidia:
     return "nvidia";
-  case spirv:
-    return "spirv";
+  case intel:
+    return "intel";
   // add new platform types to be added here
   default:
     return "invalid platform";
