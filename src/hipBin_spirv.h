@@ -142,7 +142,6 @@ HipBinSpirv::HipBinSpirv() {
   platformInfo.runtime = RuntimeType::spirv;
   platformInfo.compiler = clang;
   platformInfo_ = platformInfo;
-  constructCompilerPath();
 
   return;
 }
@@ -404,10 +403,7 @@ bool HipBinSpirv::detectPlatform() {
           fs::current_path(), hipInfo)) {
     detected = hipInfo.runtime.compare("spirv") == 0; // b.
     hipInfo_ = hipInfo;
-    return detected;
-  }
-
-  if (!var.hipPathEnv_.empty()) { // 2.
+  } else if (!var.hipPathEnv_.empty()) { // 2.
     if (readHipInfo(var.hipPathEnv_, hipInfo)) {
       detected = hipInfo.runtime == "spirv";
 
@@ -424,7 +420,6 @@ bool HipBinSpirv::detectPlatform() {
       }
 
       hipInfo_ = hipInfo;
-      return detected;
     }
   }
 
@@ -444,6 +439,8 @@ bool HipBinSpirv::detectPlatform() {
     }
   }
 
+  // Because our compiler path gets read from hipInfo, we need to do this here
+  constructCompilerPath();
   return detected;
 }
 
