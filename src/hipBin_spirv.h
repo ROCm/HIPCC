@@ -514,7 +514,6 @@ void HipBinSpirv::checkHipconfig() {
 void HipBinSpirv::printFull() {
   const string &hipVersion = getHipVersion();
   const string &hipPath = getHipPath();
-  const string &roccmPath = ""; // getRoccmPath();
   const PlatformInfo &platformInfo = getPlatformInfo();
   const string &ccpConfig = getCppConfig();
   const string &hsaPath(""); // = getHsaPath();
@@ -523,7 +522,6 @@ void HipBinSpirv::printFull() {
   cout << "HIP version: " << hipVersion << endl;
   cout << endl << "==hipconfig" << endl;
   cout << "HIP_PATH           :" << hipPath << endl;
-  cout << "ROCM_PATH          :" << roccmPath << endl;
   cout << "HIP_COMPILER       :" << CompilerTypeStr(platformInfo.compiler)
        << endl;
   cout << "HIP_PLATFORM       :" << PlatformTypeStr(platformInfo.platform)
@@ -533,7 +531,6 @@ void HipBinSpirv::printFull() {
   cout << "CPP_CONFIG         :" << ccpConfig << endl;
 
   cout << endl << "==hip-clang" << endl;
-  cout << "HSA_PATH           :" << hsaPath << endl;
   cout << "HIP_CLANG_PATH     :" << hipClangPath << endl;
   printCompilerInfo();
   cout << endl << "== Envirnoment Variables" << endl;
@@ -630,8 +627,6 @@ void HipBinSpirv::executeHipCCCmd(vector<string> argv) {
     cout << "HIP_PLATFORM=" << PlatformTypeStr(platformInfo.platform) << endl;
     cout << "HIP_COMPILER=" << CompilerTypeStr(platformInfo.compiler) << endl;
     cout << "HIP_RUNTIME=" << RuntimeTypeStr(platformInfo.runtime) << endl;
-    cout << "ROCM_PATH=" << roccmPath << endl;
-    cout << "HIP_ROCCLR_HOME=" << rocclrHomePath << endl;
     cout << "HIP_CLANG_PATH=" << hipClangPath << endl;
     cout << "HIP_CLANG_INCLUDE_PATH=" << hipclangIncludePath << endl;
     cout << "HIP_INCLUDE_PATH=" << hipIncludePath << endl;
