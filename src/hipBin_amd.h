@@ -389,10 +389,14 @@ bool HipBinAmd::detectPlatform() {
   const EnvVariables& var = getEnvVariables();
   bool detected = false;
   if (var.hipPlatformEnv_.empty()) {
-    if (canRunCompiler(cmdAmd.string(), out) ||
-       (canRunCompiler("clang++", out))) {
-      detected = true;
-    }
+    /**
+     * How does having clang++ indicate anything about having ROCm?
+     * 
+     */
+    // if (canRunCompiler(cmdAmd.string(), out) ||
+    //    (canRunCompiler("clang++", out))) {
+    //   detected = true;
+    // }
   } else {
     if (var.hipPlatformEnv_ == "amd" ||
         var.hipPlatformEnv_ == "hcc") {

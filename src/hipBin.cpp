@@ -23,6 +23,7 @@ THE SOFTWARE.
 #include "hipBin_util.h"
 #include "hipBin_amd.h"
 #include "hipBin_nvidia.h"
+#include "hipBin_spirv.h"
 #include <vector>
 #include <string>
 
@@ -69,13 +70,24 @@ HipBin::HipBin() {
     platformVec_.push_back(platformInfo);
     hipBinBasePtrs_.push_back(hipBinAMDPtr_);
     platformDetected = true;
-  } else if (hipBinNVPtr_->detectPlatform()) {
+  } 
+  
+  if (hipBinNVPtr_->detectPlatform()) {
     // populates the struct with Nvidia info
     const PlatformInfo& platformInfo = hipBinNVPtr_->getPlatformInfo();
     platformVec_.push_back(platformInfo);
     hipBinBasePtrs_.push_back(hipBinNVPtr_);
     platformDetected = true;
+  } 
+  
+   if (hipBinSPIRVPtr_->detectPlatform()) {
+    // populates the struct with Intel/SPIR-V info
+    const PlatformInfo& platformInfo = hipBinSPIRVPtr_->getPlatformInfo();
+    platformVec_.push_back(platformInfo);
+    hipBinBasePtrs_.push_back(hipBinSPIRVPtr_);
+    platformDetected = true;
   }
+
   // if no device is detected, then it is defaulted to AMD
   if (!platformDetected) {
     cout << "Device not supported - Defaulting to AMD" << endl;
@@ -112,6 +124,7 @@ void HipBin::executeHipBin(string filename, int argc, char* argv[]) {
   } else if (hipBinUtilPtr_->substringPresent(filename, "hipcc")) {
     executeHipCC(argc, argv);
   } else {
+    // this seems dumb
     cout << "Command " << filename
     << " not supported. Name the exe as hipconfig"
     << " or hipcc and then try again ..." << endl;
