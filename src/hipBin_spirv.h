@@ -318,40 +318,7 @@ const PlatformInfo &HipBinSpirv::getPlatformInfo() const {
   return platformInfo_;
 }
 
-string HipBinSpirv::getCppConfig() {
-  string cppConfig = " -D__HIP_PLATFORM_SPIRV__=";
-
-  string compilerVersion;
-  compilerVersion = getCompilerVersion();
-
-  fs::path hipPathInclude, hipClangInclude, cppConfigFs;
-  string hipClangVersionPath;
-  const string &hipPath = getHipPath();
-  hipPathInclude = hipPath;
-  hipPathInclude /= "include";
-
-  const string &compilerPath = getCompilerPath();
-  hipClangInclude = compilerPath;
-  hipClangInclude = hipClangInclude.parent_path();
-  hipClangInclude /= "lib/clang/";
-  hipClangInclude /= compilerVersion;
-  string hipClangPath = hipClangInclude.string();
-
-  const OsType &osInfo = getOSInfo();
-  if (osInfo == windows) {
-    cppConfig += " -I" + hipPathInclude.string() + " -I" + hipClangPath;
-    cppConfigFs = cppConfig;
-    cppConfigFs /= "/";
-  } else {
-    const string &hsaPath(""); // = getHsaPath();
-    cppConfig += " -I" + hipPathInclude.string() + " -I" + hipClangPath +
-                 " -I" + hsaPath;
-    cppConfigFs = cppConfig;
-    cppConfigFs /= "include";
-    cppConfig = cppConfigFs.string();
-  }
-  return cppConfig;
-}
+string HipBinSpirv::getCppConfig() { return hipInfo_.cxxflags; }
 
 string HipBinSpirv::getDeviceLibPath() const {
   const EnvVariables &var = getEnvVariables();
