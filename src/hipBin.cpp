@@ -159,6 +159,7 @@ void HipBin::executeHipConfig(int argc, char* argv[]) {
         break;
       case path: cout << platformPtrs.at(j)->getHipPath();
         break;
+      // Why is this here? ROCm is not related to either Nvidia or SPIR-V so it should be moved there?
       case roccmpath: cout << platformPtrs.at(j)->getRoccmPath();
         break;
       case cpp_config: cout << platformPtrs.at(j)->getCppConfig();

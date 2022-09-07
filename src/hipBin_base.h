@@ -390,7 +390,7 @@ void HipBinBase::getSystemInfo() const {
   } else {
     assert(os == lnx);
     cout << endl << "== Linux Kernel" << endl;
-    cout << "Hostname      :" << endl;
+    cout << "Hostname      : " << std::flush;
     system("hostname");
     system("uname -a");
   }
