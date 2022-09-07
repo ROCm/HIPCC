@@ -57,6 +57,7 @@ public:
   string runtime = "";
   string cxxflags = "";
   string ldflags = "";
+  string clangpath = "";
 
   void parseLine(string line) {
     if (line.find(HIP_RUNTIME) != string::npos) {
@@ -68,6 +69,10 @@ public:
     } else if (line.find(HIP_OFFLOAD_LINK_OPTIONS) != string::npos) {
       ldflags = line.substr(string(HIP_OFFLOAD_LINK_OPTIONS).size() +
                             1); // add + 1 to account for =
+    } else if (line.find(HIP_CLANG_PATH) != string::npos) {
+      // TODO check if llvm-config exists here
+      clangpath = line.substr(string(HIP_CLANG_PATH).size() +
+                              1); // add + 1 to account for =
     } else {
     }
 
@@ -242,9 +247,10 @@ void HipBinSpirv::constructCompilerPath() {
     }
 
   } else {
-    // HIP_CLANG_PATH was not set
+    hipClangPath_ = hipInfo_.clangpath;
   }
-  hipClangPath_ = compilerPath;
+
+  return;
 }
 
 // returns clang path.
