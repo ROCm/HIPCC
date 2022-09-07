@@ -256,35 +256,21 @@ void HipBinSpirv::constructCompilerPath() {
 const string &HipBinSpirv::getCompilerPath() const { return hipClangPath_; }
 
 void HipBinSpirv::printCompilerInfo() const {
-  const OsType &os = getOSInfo();
   const string &hipClangPath = getCompilerPath();
-  const string &hipPath = getHipPath();
-  if (os == windows) {
-    string cmd = hipClangPath + "/clang++ --version";
-    system(cmd.c_str()); // hipclang version
-    cout << "llc-version :" << endl;
-    cmd = hipClangPath + "/llc --version";
-    system(cmd.c_str()); // llc version
-    cout << "hip-clang-cxxflags :" << endl;
-    cmd = hipPath + "/bin/hipcc  --cxxflags";
-    system(cmd.c_str()); // cxx flags
-    cout << endl << "hip-clang-ldflags :" << endl;
-    cmd = hipPath + "/bin/hipcc --ldflags";
-    system(cmd.c_str()); // ld flags
-    cout << endl;
-  } else {
-    string cmd = hipClangPath + "/clang++ --version";
-    system(cmd.c_str()); // hipclang version
-    cmd = hipClangPath + "/llc --version";
-    system(cmd.c_str()); // llc version
-    cout << "hip-clang-cxxflags :" << endl;
-    cmd = hipPath + "/bin/hipcc --cxxflags";
-    system(cmd.c_str()); // cxx flags
-    cout << endl << "hip-clang-ldflags :" << endl;
-    cmd = hipPath + "/bin/hipcc --ldflags";
-    system(cmd.c_str()); // ldflags version
-    cout << endl;
-  }
+
+  cout << endl;
+
+  string cmd = hipClangPath + "/bin/clang++ --version";
+  system(cmd.c_str()); // hipclang version
+  cmd = hipClangPath + "/bin/llc --version";
+  system(cmd.c_str()); // llc version
+  cout << "hip-clang-cxxflags :" << endl;
+  cout << hipInfo_.cxxflags << endl;
+
+  cout << endl << "hip-clang-ldflags :" << endl;
+  cout << hipInfo_.ldflags << endl;
+
+  cout << endl;
 }
 
 string HipBinSpirv::getCompilerVersion() {
