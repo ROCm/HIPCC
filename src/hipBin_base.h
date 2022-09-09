@@ -212,6 +212,7 @@ enum HipBinCommand {
 class HipBinBase {
  public:
   HipBinBase();
+  virtual ~HipBinBase() {};
   // Interface functions
   virtual void constructCompilerPath() = 0;
   virtual void printFull() = 0;
