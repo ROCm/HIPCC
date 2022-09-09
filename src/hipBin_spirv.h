@@ -80,38 +80,66 @@ public:
   }
 };
 
+class Argument {
+public:
+  bool present = false;
+  string args;
+  regex regexp;
+
+  Argument(string regexpIn) : regexp(regexpIn){};
+  void parse(string argline) {
+    smatch m;
+    if (regex_search(argline, m, regexp)) {
+      present = true;
+      if (m.size() > 1) {
+        // todo get more args
+      }
+    }
+  }
+};
+
 class CompilerOptions {
 public:
   int verbose = 0; // 0x1=commands, 0x2=paths, 0x4=hipcc args
   // bool setStdLib = 0; // set if user explicitly requests -stdlib=libc++
-  bool compileOnly = 0;
-  bool needCXXFLAGS = 0;  // need to add CXX flags to compile step
-  bool needCFLAGS = 0;    // need to add C flags to compile step
-  bool needLDFLAGS = 1;   // need to add LDFLAGS to compile step.
-  bool fileTypeFlag = 0;  // to see if -x flag is mentioned
-  bool hasOMPTargets = 0; // If OMP targets is mentioned
-  bool hasC = 0;          // options contain a c-style file
+  Argument compile{"(\\s-c\\b|\\s\\S*cpp)"};
+  Argument compileOnly{"\\s-c\\b"};
+  Argument outputObject{"\\s-o\\b"};
+  Argument needCXXFLAGS{""};  // need to add CXX flags to compile step
+      Argument needCFLAGS{""}; // need to add C flags to compile step
+  Argument needLDFLAGS{""};    // need to add LDFLAGS to compile step.
+  Argument fileTypeFlag{""};   // to see if -x flag is mentioned
+  Argument hasOMPTargets{""};  // If OMP targets is mentioned
+  Argument hasC{""};           // options contain a c-style file
   // options contain a cpp-style file (NVCC must force recognition as GPU
   // file)
-  bool hasCXX = 0;
+  Argument hasCXX{""};
   // options contain a hip-style file (HIP-Clang must pass offloading options)
-  bool hasHIP = 0;
-  bool printHipVersion = 0; // print HIP version
-  bool printCXXFlags = 0;   // print HIPCXXFLAGS
-  bool printLDFlags = 0;    // print HIPLDFLAGS
-  bool runCmd = 1;
-  bool buildDeps = 0;
-  bool linkType = 1;
-  bool setLinkType = 0;
-  string hsacoVersion;
-  bool funcSupp = 0; // enable function support
-  bool rdc = 0;      // whether -fgpu-rdc is on
+  Argument hasHIP{""};
+  Argument printHipVersion{""}; // print HIP version
+  Argument printCXXFlags{""};   // print HIPCXXFLAGS
+  Argument printLDFlags{""};    // print HIPLDFLAGS
+  Argument runCmd{""};
+  Argument buildDeps{""};
+  Argument linkType{""};
+  Argument setLinkType{""};
+  Argument funcSupp{""}; // enable function support
+  Argument rdc{""};      // whether -fgpu-rdc is on
 
   void processArgs(vector<string> argv, EnvVariables var) {
+    argv.erase(argv.begin()); // remove clang++
+    string argStr;
+    for(auto arg : argv) 
+      argStr += " " + arg;
 
     if (!var.verboseEnv_.empty())
       verbose = stoi(var.verboseEnv_);
-    return;
+
+    compile.parse(argStr);
+    compileOnly.parse(argStr);
+    outputObject.parse(argStr);
+
+    runCmd.present = true;
   }
 };
 class HipBinSpirv : public HipBinBase {
@@ -187,13 +215,13 @@ const string &HipBinSpirv::getHipLdFlags() const { return hipLdFlags_; }
 void HipBinSpirv::initializeHipLdFlags() {
   string hipLibPath;
   string hipLdFlags = hipInfo_.ldflags;
-  const string &hipClangPath = getCompilerPath();
-  // If $HIPCC clang++ is not compiled, use clang instead
-  string hipCC = "\"" + hipClangPath + "/clang++";
+  // const string &hipClangPath = getCompilerPath();
+  // // If $HIPCC clang++ is not compiled, use clang instead
+  // string hipCC = "\"" + hipClangPath + "/clang++";
 
-  hipLibPath = getHipLibPath();
-  hipLdFlags += " -L\"" + hipLibPath + "\"";
-  const OsType &os = getOSInfo();
+  // hipLibPath = getHipLibPath();
+  // hipLdFlags += " -L\"" + hipLibPath + "\"";
+  // const OsType &os = getOSInfo();
 
   hipLdFlags_ = hipLdFlags;
 }
@@ -327,30 +355,7 @@ const PlatformInfo &HipBinSpirv::getPlatformInfo() const {
 string HipBinSpirv::getCppConfig() { return hipInfo_.cxxflags; }
 
 string HipBinSpirv::getDeviceLibPath() const {
-  const EnvVariables &var = getEnvVariables();
-  const string &rocclrHomePath(""); // = getRocclrHomePath();
-  const string &roccmPath = getRoccmPath();
-  fs::path bitCodePath = rocclrHomePath;
-  bitCodePath /= "lib/bitcode";
-  string deviceLibPath = var.deviceLibPathEnv_;
-  if (deviceLibPath.empty() && fs::exists(bitCodePath)) {
-    deviceLibPath = bitCodePath.string();
-  }
-
-  if (deviceLibPath.empty()) {
-    fs::path amdgcnBitcode = roccmPath;
-    amdgcnBitcode /= "amdgcn/bitcode";
-    if (fs::exists(amdgcnBitcode)) {
-      deviceLibPath = amdgcnBitcode.string();
-    } else {
-      // This path is to support an older build of the device library
-      // TODO(hipcc): To be removed in the future.
-      fs::path lib = roccmPath;
-      lib /= "lib";
-      deviceLibPath = lib.string();
-    }
-  }
-  return deviceLibPath;
+  return "";
 }
 
 bool HipBinSpirv::detectPlatform() {
@@ -418,21 +423,7 @@ bool HipBinSpirv::detectPlatform() {
 }
 
 string HipBinSpirv::getHipLibPath() const {
-  string hipLibPath;
-  const EnvVariables &env = getEnvVariables();
-  if (env.hipLibPathEnv_.empty()) {
-    const string &rocclrHomePath(""); // = getRocclrHomePath();
-    fs::path libPath = rocclrHomePath;
-    libPath /= "lib";
-    hipLibPath = libPath.string();
-  }
-  if (hipLibPath.empty()) {
-    const string &hipPath = getHipPath();
-    fs::path libPath = hipPath;
-    libPath /= "lib";
-    hipLibPath = libPath.string();
-  }
-  return hipLibPath;
+  return "";
 }
 
 string HipBinSpirv::getHipCC() const {
@@ -576,7 +567,7 @@ void HipBinSpirv::executeHipCCCmd(vector<string> argv) {
   }
 
   // Add --hip-link only if it is compile only and -fgpu-rdc is on.
-  if (opts.rdc && !opts.compileOnly) {
+  if (opts.rdc.present && !opts.compileOnly.present) {
     HIPLDFLAGS += " --hip-link";
     HIPLDFLAGS += HIPLDARCHFLAGS;
   }
@@ -614,37 +605,33 @@ void HipBinSpirv::executeHipCCCmd(vector<string> argv) {
   compiler = getHipCC();
   string CMD = compiler;
 
-
-
-  if (opts.needCFLAGS) {
+  if (opts.needCFLAGS.present) {
     CMD += " " + HIPCFLAGS;
   }
 
-  opts.needCXXFLAGS = true;
-  if (opts.needCXXFLAGS) {
+  opts.needCXXFLAGS.present = opts.compile.present;
+  if (opts.needCXXFLAGS.present) {
     CMD += " " + HIPCXXFLAGS;
   }
 
-  opts.needLDFLAGS = true;
-  if (opts.needLDFLAGS && !opts.compileOnly) {
+  opts.needLDFLAGS.present = opts.outputObject.present && !opts.compileOnly.present;
+  if (opts.needLDFLAGS.present) {
     CMD += " " + HIPLDFLAGS;
   }
 
   CMD += " " + toolArgs;
-  if (opts.verbose & 0x1) {
-    cout << "hipcc-cmd: " << CMD << "\n";
-  }
 
-  if (opts.printHipVersion) {
-    if (opts.runCmd) {
+
+  if (opts.printHipVersion.present) {
+    if (opts.runCmd.present) {
       cout << "HIP version: ";
     }
     cout << hipVersion << endl;
   }
-  if (opts.printCXXFlags) {
+  if (opts.printCXXFlags.present) {
     cout << HIPCXXFLAGS;
   }
-  if (opts.printLDFlags) {
+  if (opts.printLDFlags.present) {
     cout << HIPLDFLAGS;
   }
 
@@ -654,7 +641,11 @@ void HipBinSpirv::executeHipCCCmd(vector<string> argv) {
     CMD += " " + arg;
   }
 
-  if (opts.runCmd) {
+  if (opts.verbose & 0x1) {
+    cout << "hipcc-cmd: " << CMD << "\n";
+  }
+
+  if (opts.runCmd.present) {
     SystemCmdOut sysOut;
     sysOut = hipBinUtilPtr_->exec(CMD.c_str(), true);
     string cmdOut = sysOut.out;
