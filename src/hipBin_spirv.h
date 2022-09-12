@@ -52,6 +52,11 @@ THE SOFTWARE.
 
 #define HIP_OFFLOAD_COMPILE_OPTIONS "HIP_OFFLOAD_COMPILE_OPTIONS"
 #define HIP_OFFLOAD_LINK_OPTIONS "HIP_OFFLOAD_LINK_OPTIONS"
+
+/**
+ * @brief Container class for parsing and storing .hipInfo
+ *
+ */
 class HipInfo {
 public:
   string runtime = "";
@@ -80,20 +85,44 @@ public:
   }
 };
 
+/**
+ * @brief A container class for representing a single argument to hipcc
+ *
+ */
 class Argument {
+private:
+  // Should this arg be passed onto clang++ invocation
+  bool passthrough_ = true;
+
 public:
+  // Is the argument present/enabled
   bool present = false;
+  // Any additional arguments to this argument. 
+  // Example: "MyName" in `hipcc <...> -o MyName`
   string args;
+  // Regex for which a match enables this argument
   regex regexp;
 
+  Argument() {};
   Argument(string regexpIn) : regexp(regexpIn){};
-  void parse(string argline) {
+  Argument(string regexpIn, bool passthrough)
+      : regexp(regexpIn), passthrough_(passthrough){};
+  /**
+   * @brief Parse the compiler invocation and enable this argument
+   *
+   * @param argline string reprenting the campiler invocation
+   */
+  void parseLine(string argline) {
     smatch m;
     if (regex_search(argline, m, regexp)) {
       present = true;
       if (m.size() > 1) {
         // todo get more args
       }
+    }
+
+    if(present && !passthrough_) {
+      regex_replace(argline, regexp, "");
     }
   }
 };
@@ -105,41 +134,49 @@ public:
   Argument compile{"(\\s-c\\b|\\s\\S*cpp)"};
   Argument compileOnly{"\\s-c\\b"};
   Argument outputObject{"\\s-o\\b"};
-  Argument needCXXFLAGS{""};  // need to add CXX flags to compile step
-      Argument needCFLAGS{""}; // need to add C flags to compile step
-  Argument needLDFLAGS{""};    // need to add LDFLAGS to compile step.
-  Argument fileTypeFlag{""};   // to see if -x flag is mentioned
-  Argument hasOMPTargets{""};  // If OMP targets is mentioned
-  Argument hasC{""};           // options contain a c-style file
+  Argument needCXXFLAGS;  // need to add CXX flags to compile step
+  Argument needCFLAGS;    // need to add C flags to compile step
+  Argument needLDFLAGS;   // need to add LDFLAGS to compile step.
+  Argument fileTypeFlag;  // to see if -x flag is mentioned
+  Argument hasOMPTargets; // If OMP targets is mentioned
+  Argument hasC;          // options contain a c-style file
   // options contain a cpp-style file (NVCC must force recognition as GPU
   // file)
-  Argument hasCXX{""};
+  Argument hasCXX;
   // options contain a hip-style file (HIP-Clang must pass offloading options)
-  Argument hasHIP{""};
-  Argument printHipVersion{""}; // print HIP version
-  Argument printCXXFlags{""};   // print HIPCXXFLAGS
-  Argument printLDFlags{""};    // print HIPLDFLAGS
-  Argument runCmd{""};
-  Argument buildDeps{""};
-  Argument linkType{""};
-  Argument setLinkType{""};
-  Argument funcSupp{""}; // enable function support
-  Argument rdc{""};      // whether -fgpu-rdc is on
+  Argument hasHIP;
+  Argument printHipVersion{"\\s--short-version\\b", false}; // print HIP version
+  Argument printCXXFlags{"\\s--cxxflags\\b", false};        // print HIPCXXFLAGS
+  Argument printLDFlags{"\\s--ldflags\\b", false};          // print HIPLDFLAGS
+  Argument runCmd;
+  Argument buildDeps;
+  Argument linkType;
+  Argument setLinkType;
+  Argument funcSupp; // enable function support
+  Argument rdc;      // whether -fgpu-rdc is on
 
   void processArgs(vector<string> argv, EnvVariables var) {
     argv.erase(argv.begin()); // remove clang++
     string argStr;
-    for(auto arg : argv) 
+    for (auto arg : argv)
       argStr += " " + arg;
 
     if (!var.verboseEnv_.empty())
       verbose = stoi(var.verboseEnv_);
 
-    compile.parse(argStr);
-    compileOnly.parse(argStr);
-    outputObject.parse(argStr);
+    compile.parseLine(argStr);
+    compileOnly.parseLine(argStr);
+    outputObject.parseLine(argStr);
 
-    runCmd.present = true;
+    printHipVersion.parseLine(argStr);
+    printCXXFlags.parseLine(argStr);
+    printLDFlags.parseLine(argStr);
+    if (printHipVersion.present || printCXXFlags.present ||
+        printLDFlags.present) {
+      runCmd.present = false;
+    } else {
+      runCmd.present = true;
+    }
   }
 };
 class HipBinSpirv : public HipBinBase {
@@ -354,9 +391,7 @@ const PlatformInfo &HipBinSpirv::getPlatformInfo() const {
 
 string HipBinSpirv::getCppConfig() { return hipInfo_.cxxflags; }
 
-string HipBinSpirv::getDeviceLibPath() const {
-  return "";
-}
+string HipBinSpirv::getDeviceLibPath() const { return ""; }
 
 bool HipBinSpirv::detectPlatform() {
   if (getOSInfo() == windows) {
@@ -422,9 +457,7 @@ bool HipBinSpirv::detectPlatform() {
   return detected;
 }
 
-string HipBinSpirv::getHipLibPath() const {
-  return "";
-}
+string HipBinSpirv::getHipLibPath() const { return ""; }
 
 string HipBinSpirv::getHipCC() const {
   string hipCC;
@@ -614,13 +647,13 @@ void HipBinSpirv::executeHipCCCmd(vector<string> argv) {
     CMD += " " + HIPCXXFLAGS;
   }
 
-  opts.needLDFLAGS.present = opts.outputObject.present && !opts.compileOnly.present;
+  opts.needLDFLAGS.present =
+      opts.outputObject.present && !opts.compileOnly.present;
   if (opts.needLDFLAGS.present) {
     CMD += " " + HIPLDFLAGS;
   }
 
   CMD += " " + toolArgs;
-
 
   if (opts.printHipVersion.present) {
     if (opts.runCmd.present) {
