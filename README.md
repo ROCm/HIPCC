@@ -22,8 +22,8 @@
 
 ### <a name="envVar"></a> Environment Variables
 
-The environment variable HIP_PLATFORM may be used to specify amd/nvidia:
-- HIP_PLATFORM='amd' or HIP_PLATFORM='nvidia'.
+The environment variable HIP_PLATFORM may be used to specify amd/nvidia/spirv:
+- HIP_PLATFORM='amd' or HIP_PLATFORM='nvidia' or HIP_PLATFORM='spirv'.
 - If HIP_PLATFORM is not set, then hipcc will attempt to auto-detect based on if nvcc is found.
 
 Other environment variable controls:
@@ -34,6 +34,7 @@ Other environment variable controls:
 - HIP_CLANG_PATH  : Path to HIP-Clang (default to ../../llvm/bin relative to hipcc's abs_path). Used on AMD platforms only.
 
 ### <a name="usage"></a> hipcc: usage
+It is possible that there are multiple HIP implementations on a single system. To avoid guessing it is recommended to set `HIP_PATH` to the install location of the HIP implementation you wish to use.
 
 The built executables can be used the same way as the hipcc/hipconfig perl scripts. 
 To use the newly built executables from the build folder use ./ in front of the executable name -
