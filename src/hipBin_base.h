@@ -467,7 +467,6 @@ bool HipBinBase::canRunCompiler(string exeName, string& cmdOut) {
   fs::path templateFs = temp_dir;
   templateFs /= "canRunXXXXXX";
   string tmpFileName = hipBinUtilPtr_->mktempFile(templateFs.string());
-  // clang++ --version > /tmp/canRunXXXXX 2>&1
   compilerName += " --version > " + tmpFileName + " 2>&1";
   bool executable = false;
   if (system(const_cast<char*>(compilerName.c_str()))) {

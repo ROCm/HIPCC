@@ -390,8 +390,8 @@ bool HipBinAmd::detectPlatform() {
   bool detected = false;
   if (var.hipPlatformEnv_.empty()) {
     /**
-     * How does having clang++ indicate anything about having ROCm?
-     * 
+     * if you set HIP_CLANG_PATH, this section of the code will find 
+     * clang++ and return HIPAMD as detect which is not correct. 
      */
     // if (canRunCompiler(cmdAmd.string(), out) ||
     //    (canRunCompiler("clang++", out))) {

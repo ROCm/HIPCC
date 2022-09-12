@@ -124,7 +124,7 @@ void HipBin::executeHipBin(string filename, int argc, char* argv[]) {
   } else if (hipBinUtilPtr_->substringPresent(filename, "hipcc")) {
     executeHipCC(argc, argv);
   } else {
-    // this seems dumb
+    // A bit strange?
     cout << "Command " << filename
     << " not supported. Name the exe as hipconfig"
     << " or hipcc and then try again ..." << endl;
@@ -159,7 +159,7 @@ void HipBin::executeHipConfig(int argc, char* argv[]) {
         break;
       case path: cout << platformPtrs.at(j)->getHipPath();
         break;
-      // Why is this here? ROCm is not related to either Nvidia or SPIR-V so it should be moved there?
+      // ROCm is not related to either Nvidia or SPIR-V so it should be moved to hipBin_amd.h?
       case roccmpath: cout << platformPtrs.at(j)->getRoccmPath();
         break;
       case cpp_config: cout << platformPtrs.at(j)->getCppConfig();
