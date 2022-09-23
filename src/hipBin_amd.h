@@ -41,7 +41,6 @@ THE SOFTWARE.
 
 class HipBinAmd : public HipBinBase {
  private:
-  HipBinUtil* hipBinUtilPtr_;
   string hipClangPath_ = "";
   string roccmPathEnv_, hipRocclrPathEnv_, hsaPathEnv_;
   PlatformInfo platformInfoAMD_;
@@ -60,6 +59,7 @@ class HipBinAmd : public HipBinBase {
   virtual void printFull();
   virtual void printCompilerInfo() const;
   virtual string getCompilerVersion();
+  virtual string getCompilerTarget();
   virtual void checkHipconfig();
   virtual string getDeviceLibPath() const;
   virtual string getHipLibPath() const;
@@ -311,7 +311,32 @@ string HipBinAmd::getCompilerVersion() {
   return complierVersion;
 }
 
-
+string HipBinAmd::getCompilerTarget() {
+  string out;
+  string cmdAmd = getCompilerPath() + "/clang++ -print-target-triple";
+  fs::path templateFs(hipBinUtilPtr_->getTempDir());
+  templateFs /= "ClangTargetTripleXXXXXX";
+  string tmpFileName = hipBinUtilPtr_->mktempFile(templateFs.string());
+  cmdAmd += " > " + tmpFileName + " 2>&1";
+  if (system(cmdAmd.c_str())) {
+    cout << "Hip Clang Compiler could not retrieve target triple" << endl;
+    return out;
+  }
+  string myline;
+  ifstream fp;
+  fp.open(tmpFileName);
+  if (!fp.is_open()) {
+    cout << "Could not open target triple temporary file" << endl;
+    return out;
+  }
+  while (std::getline(fp, myline))
+    out += myline;
+  fp.close();
+  if (out.empty()) {
+    cout << "Failed parsing clang target triple" << endl;
+  }
+  return out;
+}
 
 const PlatformInfo& HipBinAmd::getPlatformInfo() const {
   return platformInfoAMD_;
@@ -592,6 +617,7 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
   hipIncludePath = getHipInclude();
   deviceLibPath = getDeviceLibPath();
   const string& hipVersion = getHipVersion();
+  const string& hipClangTarget = getCompilerTarget();
   if (verbose & 0x2) {
     cout << "HIP_PATH=" << hipPath << endl;
     cout << "HIP_PLATFORM=" <<  PlatformTypeStr(platformInfo.platform) <<endl;
@@ -604,6 +630,7 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
     cout << "HIP_INCLUDE_PATH="<< hipIncludePath  <<endl;
     cout << "HIP_LIB_PATH="<< hipLibPath <<endl;
     cout << "DEVICE_LIB_PATH="<< deviceLibPath <<endl;
+    cout << "HIP_CLANG_TARGET="<< hipClangTarget <<endl;
   }
 
   if (verbose & 0x4) {
@@ -1094,21 +1121,31 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
   }
 
   if (os != windows && !compileOnly) {
-    string hipClangVersion, toolArgTemp;
+    string hipClangVersion, toolArgTemp, hipClangTarget;
     if (linkType == 0) {
       toolArgTemp = " -L"+ hipLibPath + "-lamdhip64 -L" +
                       roccmPath+ "/lib -lhsa-runtime64 -ldl -lnuma " + toolArgs;
       toolArgs = toolArgTemp;
     } else {
-      toolArgTemp =  toolArgs + " -Wl,-rpath=" + hipLibPath + ":"
-                    + roccmPath+"/lib -lamdhip64 ";
-      toolArgs =  toolArgTemp;
+      toolArgTemp = toolArgs + " -L" + roccmPath +
+                    "/lib -Wl,-rpath=" + hipLibPath + ":" + roccmPath + "/lib" +
+                    " -lamdhip64";
+      toolArgs = toolArgTemp;
     }
 
     hipClangVersion = getCompilerVersion();
+    hipClangTarget = getCompilerTarget();
+
     // To support __fp16 and _Float16, explicitly link with compiler-rt
-    toolArgs += " -L" + hipClangPath + "/../lib/clang/" +
+    string hipClangBuiltinLib = hipClangPath + "/../lib/clang/" +
+      hipClangVersion + "/lib/" + hipClangTarget + "/libclang_rt.builtins.a";
+    if (fs::exists({hipClangBuiltinLib})) {
+      toolArgs += " -L" + hipClangPath + "/../lib/clang/" + hipClangVersion +
+                  "/lib/" + hipClangTarget + " -lclang_rt.builtins ";
+    } else {
+      toolArgs += " -L" + hipClangPath + "/../lib/clang/" +
                 hipClangVersion + "/lib/linux -lclang_rt.builtins-x86_64 ";
+    }
   }
   if (!var.hipccCompileFlagsAppendEnv_.empty()) {
     HIPCXXFLAGS += " " + var.hipccCompileFlagsAppendEnv_ + " ";
