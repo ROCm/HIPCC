@@ -214,7 +214,7 @@ public:
 
   bool readHipInfo(const string hip_path, HipInfo &result) {
     fs::path path(hip_path);
-    path /= "bin/.hipInfo";
+    path /= ".hipInfo";
     if (!fs::exists(path))
       return false;
 
@@ -402,9 +402,9 @@ bool HipBinSpirv::detectPlatform() {
   const EnvVariables &var = getEnvVariables();
 
   /**
-   * 1. Check if .hipInfo is available in the same directory as I am
+   * 1. Check if .hipInfo is available in the ../share directory as I am
    *     a. Check .hipInfo for HIP_PLATFORM==spirv if so, return detected
-   * 2. If HIP_PATH is set, check ${HIP_PATH}/bin for .hipInfo
+   * 2. If HIP_PATH is set, check ${HIP_PATH}/share for .hipInfo
    *     b. If .hipInfo HIP_PLATFORM=spirv, return detected
    * 3. We haven't found .hipVars meaning we couldn't find a good installation
    * of CHIP-SPV. Check to see if the environment variables were not forcing
@@ -412,8 +412,11 @@ bool HipBinSpirv::detectPlatform() {
    */
 
   HipInfo hipInfo;
+  fs::path currentBinaryPath = fs::canonical("/proc/self/exe");
+  currentBinaryPath = currentBinaryPath.parent_path();
+  fs::path sharePath = currentBinaryPath.string() + "/../share";
   if (readHipInfo( // 1.
-          fs::current_path(), hipInfo)) {
+          sharePath, hipInfo)) {
     detected = hipInfo.runtime.compare("spirv") == 0; // b.
     hipInfo_ = hipInfo;
   } else if (!var.hipPathEnv_.empty()) { // 2.
@@ -447,7 +450,7 @@ bool HipBinSpirv::detectPlatform() {
           << "Error: HIP_PLATFORM=" << var.hipPlatformEnv_
           << " was set but .hipInfo(generated during CHIP-SPV install) was not "
              "found in HIP_PATH="
-          << var.hipPathEnv_ << "/bin" << endl;
+          << var.hipPathEnv_ << "/share" << endl;
       std::exit(EXIT_FAILURE);
     }
   }
