@@ -368,8 +368,8 @@ string HipBinSpirv::getCompilerVersion() {
    * $: llvm-config --version
    * $: 14.0.0
    */
-  cmd /= "clang++";
-  if (canRunCompiler(cmd.string(), out) || canRunCompiler("clang++", out)) {
+  cmd /= "llvm-config";
+  if (canRunCompiler(cmd.string(), out) || canRunCompiler("llvm-config", out)) {
     regex regexp("([0-9.]+)");
     smatch m;
     if (regex_search(out, m, regexp)) {
