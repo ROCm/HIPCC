@@ -214,7 +214,7 @@ public:
 
   bool readHipInfo(const string hip_path, HipInfo &result) {
     fs::path path(hip_path);
-    path /= ".hipInfo";
+    path /= "share/.hipInfo";
     if (!fs::exists(path))
       return false;
 
