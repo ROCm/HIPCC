@@ -345,9 +345,9 @@ void HipBinSpirv::printCompilerInfo() const {
 
   cout << endl;
 
-  string cmd = hipClangPath + "clang++ --version";
+  string cmd = hipClangPath + "/clang++ --version";
   system(cmd.c_str()); // hipclang version
-  cmd = hipClangPath + "llc --version";
+  cmd = hipClangPath + "/llc --version";
   system(cmd.c_str()); // llc version
   cout << "hip-clang-cxxflags :" << endl;
   cout << hipInfo_.cxxflags << endl;
@@ -368,7 +368,7 @@ string HipBinSpirv::getCompilerVersion() {
    * $: llvm-config --version
    * $: 14.0.0
    */
-  cmd /= "llvm-config";
+  cmd /= "/llvm-config";
   if (canRunCompiler(cmd.string(), out) || canRunCompiler("llvm-config", out)) {
     regex regexp("([0-9.]+)");
     smatch m;
@@ -439,10 +439,10 @@ bool HipBinSpirv::detectPlatform() {
     }
   }
 
-  if (var.hipPlatformEnv_ == "spirv" || var.hipPlatformEnv_ == "intel") { // 3.
+  if (!detected && (var.hipPlatformEnv_ == "spirv" || var.hipPlatformEnv_ == "intel")) { // 3.
     if (var.hipPathEnv_.empty()) {
       cout << "Error: setting HIP_PLATFORM=spirv/intel requires setting "
-              "HIP_PATH=/path/to/CHIP-SPV install/"
+              "HIP_PATH=/path/to/CHIP-SPV-INSTALL-DIR/"
            << endl;
       std::exit(EXIT_FAILURE);
     } else {
