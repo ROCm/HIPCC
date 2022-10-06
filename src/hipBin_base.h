@@ -483,6 +483,8 @@ bool HipBinBase::canRunCompiler(string exeName, string& cmdOut) {
     fp.close();
     executable = true;
   }
+
+  fs::remove(tmpFileName);
   return executable;
 }
 
