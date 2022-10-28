@@ -64,7 +64,6 @@ class HipBinAmd : public HipBinBase {
   virtual string getDeviceLibPath() const;
   virtual string getHipLibPath() const;
   virtual string getHipCC() const;
-  virtual string getCompilerIncludePath();
   virtual string getHipInclude() const;
   virtual void initializeHipCXXFlags();
   virtual void initializeHipCFlags();
@@ -166,9 +165,6 @@ void HipBinAmd::initializeHipLdFlags() {
 
 void HipBinAmd::initializeHipCFlags() {
   string hipCFlags;
-  string hipclangIncludePath;
-  hipclangIncludePath = getHipInclude();
-  hipCFlags += " -isystem \"" + hipclangIncludePath + "\"";
   const OsType& os = getOSInfo();
   if (os != windows) {
     string hsaPath;
@@ -203,12 +199,6 @@ string HipBinAmd::getHipInclude() const {
 void HipBinAmd::initializeHipCXXFlags() {
   string hipCXXFlags;
   const OsType& os = getOSInfo();
-  string hipClangIncludePath;
-  hipClangIncludePath = getCompilerIncludePath();
-  hipCXXFlags += " -isystem \"" + hipClangIncludePath;
-  fs::path hipCXXFlagsTempFs = hipCXXFlags;
-  hipCXXFlagsTempFs /= "..\"";
-  hipCXXFlags = hipCXXFlagsTempFs.string();
   const EnvVariables& var = getEnvVariables();
   // Allow __fp16 as function parameter and return type.
   if (var.hipClangHccCompactModeEnv_.compare("1") == 0) {
@@ -324,28 +314,19 @@ string HipBinAmd::getCppConfig() {
   string compilerVersion;
   compilerVersion = getCompilerVersion();
 
-  fs::path hipPathInclude, hipClangInclude, cppConfigFs;
-  string hipClangVersionPath;
+  fs::path hipPathInclude, cppConfigFs;
   const string& hipPath = getHipPath();
   hipPathInclude = hipPath;
   hipPathInclude /= "include";
-
-  const string& compilerPath = getCompilerPath();
-  hipClangInclude = compilerPath;
-  hipClangInclude = hipClangInclude.parent_path();
-  hipClangInclude /= "lib/clang/";
-  hipClangInclude /= compilerVersion;
-  string hipClangPath = hipClangInclude.string();
-
   const OsType& osInfo = getOSInfo();
   if (osInfo == windows) {
-    cppConfig += " -I" + hipPathInclude.string() + " -I" + hipClangPath;
+    cppConfig += " -I" + hipPathInclude.string();
     cppConfigFs = cppConfig;
     cppConfigFs /= "/";
   } else {
     const string& hsaPath = getHsaPath();
     cppConfig += " -I" + hipPathInclude.string() +
-                 " -I" + hipClangPath + " -I" + hsaPath;
+                 " -I" + hsaPath;
     cppConfigFs = cppConfig;
     cppConfigFs /= "include";
     cppConfig = cppConfigFs.string();
@@ -438,23 +419,6 @@ string HipBinAmd::getHipCC() const {
   hipCC = compiler.string();
   return hipCC;
 }
-
-
-
-string HipBinAmd::getCompilerIncludePath() {
-  string hipClangVersion, includePath, compilerIncludePath;
-  const string& hipClangPath = getCompilerPath();
-  hipClangVersion = getCompilerVersion();
-  fs::path includePathfs = hipClangPath;
-  includePathfs = includePathfs.parent_path();
-  includePathfs /= "lib/clang/";
-  includePathfs /= hipClangVersion;
-  includePathfs /= "include";
-  includePathfs = fs::absolute(includePathfs).string();
-  compilerIncludePath = includePathfs.string();
-  return compilerIncludePath;
-}
-
 
 void HipBinAmd::checkHipconfig() {
   printFull();
@@ -581,14 +545,13 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
   HIPCXXFLAGS = getHipCXXFlags();
   HIPLDFLAGS = getHipLdFlags();
   string hipLibPath;
-  string hipclangIncludePath , hipIncludePath, deviceLibPath;
+  string hipIncludePath, deviceLibPath;
   hipLibPath = getHipLibPath();
   const string& roccmPath = getRoccmPath();
   const string& hipPath = getHipPath();
   const PlatformInfo& platformInfo = getPlatformInfo();
   const string& rocclrHomePath = getRocclrHomePath();
   const string& hipClangPath = getCompilerPath();
-  hipclangIncludePath = getCompilerIncludePath();
   hipIncludePath = getHipInclude();
   deviceLibPath = getDeviceLibPath();
   const string& hipVersion = getHipVersion();
@@ -600,7 +563,6 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
     cout << "ROCM_PATH=" << roccmPath << endl;
     cout << "HIP_ROCCLR_HOME="<< rocclrHomePath << endl;
     cout << "HIP_CLANG_PATH=" << hipClangPath <<endl;
-    cout << "HIP_CLANG_INCLUDE_PATH="<< hipclangIncludePath <<endl;
     cout << "HIP_INCLUDE_PATH="<< hipIncludePath  <<endl;
     cout << "HIP_LIB_PATH="<< hipLibPath <<endl;
     cout << "DEVICE_LIB_PATH="<< deviceLibPath <<endl;
@@ -656,6 +618,10 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
       // match arg with the starting of targetOpt
       string pattern = "^" + targetOpt + ".*";
       if (hipBinUtilPtr_->stringRegexMatch(arg, pattern))  {
+        if (targetOpt == "--amdgpu-target=") {
+          cout << "Warning: The --amdgpu-target option has been deprecated and will be removed in the future."
+               << "  Use --offload-arch instead.\n";  
+        }
         // If targets string is not empty,
         // add a comma before adding new target option value.
         targetsStr.size() >0 ? targetsStr += ",": targetsStr += "";
@@ -689,10 +655,6 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
       compileOnly = 1;
       buildDeps = 1;
     }
-    if (trimarg == "-use_fast_math") {
-      HIPCXXFLAGS += " -DHIP_FAST_MATH ";
-      HIPCFLAGS += " -DHIP_FAST_MATH ";
-    }
     if ((trimarg == "-use-staticlib") && (setLinkType == 0)) {
       linkType = 0;
       setLinkType = 1;
@@ -707,6 +669,8 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
     }
     if (hipBinUtilPtr_->substringPresent(
         arg, "--amdhsa-code-object-version=")) {
+      cout << "Warning: The --amdhsa-code-object-version option has been deprecated and will be removed in the future."
+           << "  Use -mllvm -mcode-object-version instead.\n";
       arg = hipBinUtilPtr_->replaceStr(
             arg, "--amdhsa-code-object-version=", "");
       hsacoVersion = arg;
@@ -847,7 +811,7 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
           isObj =  (hipBinUtilPtr_->substringPresent(fileType, "ELF") ||
                     hipBinUtilPtr_->substringPresent(fileType, "COFF"));
           if (hipBinUtilPtr_->substringPresent(fileType, "ELF")) {
-            cmd = "readelf -e -W " + obj;
+            cmd = "llvm-readelf -e -W " + obj;
             SystemCmdOut sysOut;
             sysOut = hipBinUtilPtr_->exec(cmd.c_str());
             string sections = sysOut.out;
@@ -919,12 +883,11 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
         //# Process HIPCC options here:
         if (hipBinUtilPtr_->stringRegexMatch(arg, "^--hipcc.*")) {
           swallowArg = 1;
-          // if $arg eq "--hipcc_profile") {  # Example argument here, hipcc
-          //
-          // }
           if (arg == "--hipcc-func-supp") {
+            cout << "Warning: The --hipcc-func-supp option has been deprecated and will be removed in the future.\n";
             funcSupp = 1;
           } else if (arg == "--hipcc-no-func-supp") {
+            cout << "Warning: The --hipcc-no-func-supp option has been deprecated and will be removed in the future.\n";
             funcSupp = 0;
           }
         } else {
@@ -1100,7 +1063,7 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
                       roccmPath+ "/lib -lhsa-runtime64 -ldl -lnuma " + toolArgs;
       toolArgs = toolArgTemp;
     } else {
-      toolArgTemp =  toolArgs + " -Wl,--enable-new-dtags -Wl,-rpath=" + hipLibPath + ":"
+      toolArgTemp =  toolArgs + " -Wl,-rpath=" + hipLibPath + ":"
                     + roccmPath+"/lib -lamdhip64 ";
       toolArgs =  toolArgTemp;
     }
