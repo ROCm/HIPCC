@@ -541,7 +541,17 @@ void HipBinSpirv::printFull() {
   cout << endl;
 }
 
-void HipBinSpirv::executeHipCCCmd(vector<string> argv) {
+void HipBinSpirv::executeHipCCCmd(vector<string> origArgv) {
+  vector<string> argv;
+  // Filter away a possible duplicate --offload=spirv64 flag which can be passed
+  // in builds that call hipcc with direct output of hip_config --cpp_flags.
+  // We have to include the flag in the --cpp_flags output to retain the
+  // option to use clang++ directly for HIP compilation instead of hipcc.
+  for (int i = 0; i < origArgv.size(); i++) {
+    if (origArgv[i] != "--offload=spirv64")
+      argv.push_back(origArgv[i]);
+  }
+
   if (argv.size() < 2) {
     cout << "No Arguments passed, exiting ...\n";
     exit(EXIT_SUCCESS);
