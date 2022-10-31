@@ -213,9 +213,9 @@ public:
   virtual const string &getHipLdFlags() const;
   virtual void executeHipCCCmd(vector<string> argv);
 
-  bool readHipInfo(const string hip_path, HipInfo &result) {
-    fs::path path(hip_path);
-    path /= "share/.hipInfo";
+  bool readHipInfo(const string hip_path_share, HipInfo &result) {
+    std::cout << "Searching for .hipInfo in " << hip_path_share << std::endl;
+    fs::path path(hip_path_share + "/.hipInfo");
     if (!fs::exists(path))
       return false;
 
@@ -415,13 +415,14 @@ bool HipBinSpirv::detectPlatform() {
   HipInfo hipInfo;
   fs::path currentBinaryPath = fs::canonical("/proc/self/exe");
   currentBinaryPath = currentBinaryPath.parent_path();
-  fs::path sharePath = currentBinaryPath.string() + "/../share";
+  fs::path sharePathBuild = currentBinaryPath.string() + "/../share";
+  fs::path sharePathInstall = var.hipPathEnv_.empty() ? "" : var.hipPathEnv_ + "/share";
   if (readHipInfo( // 1.
-          sharePath, hipInfo)) {
+          sharePathBuild, hipInfo)) {
     detected = hipInfo.runtime.compare("spirv") == 0; // b.
     hipInfo_ = hipInfo;
-  } else if (!var.hipPathEnv_.empty()) { // 2.
-    if (readHipInfo(var.hipPathEnv_, hipInfo)) {
+  } else if (!sharePathInstall.empty()) { // 2.
+    if (readHipInfo(sharePathInstall, hipInfo)) {
       detected = hipInfo.runtime == "spirv";
 
       // check that HIP_RUNTIME found in .hipVars does not conflict with
