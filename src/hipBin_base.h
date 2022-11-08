@@ -217,7 +217,6 @@ class HipBinBase {
   virtual string getCppConfig() = 0;
   virtual void checkHipconfig() = 0;
   virtual string getDeviceLibPath() const = 0;
-  virtual string getHipLibPath() const = 0;
   virtual string getHipCC() const = 0;
   virtual string getHipInclude() const = 0;
   virtual void initializeHipCXXFlags() = 0;

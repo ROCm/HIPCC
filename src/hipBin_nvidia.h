@@ -48,7 +48,6 @@ class HipBinNvidia : public HipBinBase {
   virtual string getCompilerVersion();
   virtual void checkHipconfig();
   virtual string getDeviceLibPath() const;
-  virtual string getHipLibPath() const;
   virtual string getHipCC() const;
   virtual string getCompilerIncludePath();
   virtual string getHipInclude() const;
@@ -216,14 +215,6 @@ void HipBinNvidia::initializeHipCXXFlags() {
   hipIncludePath = getHipInclude();
   hipCXXFlags += " -isystem \"" + hipIncludePath + "\"";
   hipCXXFlags_ = hipCXXFlags;
-}
-
-// returns Hip Lib Path
-string HipBinNvidia::getHipLibPath() const {
-  string hipLibPath;
-  const EnvVariables& env = getEnvVariables();
-  hipLibPath = env.hipLibPathEnv_;
-  return hipLibPath;
 }
 
 // gets nvcc compiler Path
