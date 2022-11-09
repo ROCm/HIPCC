@@ -97,13 +97,13 @@ private:
 public:
   // Is the argument present/enabled
   bool present = false;
-  // Any additional arguments to this argument. 
+  // Any additional arguments to this argument.
   // Example: "MyName" in `hipcc <...> -o MyName`
   string args;
   // Regex for which a match enables this argument
   regex regexp;
 
-  Argument() {};
+  Argument(){};
   Argument(string regexpIn) : regexp(regexpIn){};
   Argument(string regexpIn, bool passthrough)
       : regexp(regexpIn), passthrough_(passthrough){};
@@ -121,7 +121,7 @@ public:
       }
     }
 
-    if(present && !passthrough_) {
+    if (present && !passthrough_) {
       regex_replace(argline, regexp, "");
     }
   }
@@ -131,15 +131,24 @@ class CompilerOptions {
 public:
   int verbose = 0; // 0x1=commands, 0x2=paths, 0x4=hipcc args
   // bool setStdLib = 0; // set if user explicitly requests -stdlib=libc++
-  Argument compile{"(\\s-c\\b|\\s\\S*cpp\\s)"}; // search for *.cpp src files or -c
-  Argument compileOnly{"\\s-c\\b"}; // search for -c
-  Argument outputObject{"\\s-o\\b"}; // search for -o 
-  Argument needCXXFLAGS;  // need to add CXX flags to compile step
-  Argument needCFLAGS;    // need to add C flags to compile step
-  Argument needLDFLAGS;   // need to add LDFLAGS to compile step.
-  Argument fileTypeFlag;  // to see if -x flag is mentioned
-  Argument hasOMPTargets; // If OMP targets is mentioned
-  Argument hasC;          // options contain a c-style file
+  /**
+   * Use compilation mode if any of these matches:
+   * - [whitespace]-c[whitespace]
+   * - [whitespace][whatever].cpp[whitespace]
+   * - [whitespace][whatever].c[whitespace]
+   * - [whitespace][whatever].hip[whitespace]
+   * - [whitespace][whatever].cu[whitespace]
+   */
+  Argument compile{
+      "(\\s-c\\s|\\s\\S*\\.(cpp|c|hip|cu)\\s)"};   // search for *.cpp src files or -c
+  Argument compileOnly{"\\s-c\\b"};  // search for -c
+  Argument outputObject{"\\s-o\\b"}; // search for -o
+  Argument needCXXFLAGS;             // need to add CXX flags to compile step
+  Argument needCFLAGS;               // need to add C flags to compile step
+  Argument needLDFLAGS;              // need to add LDFLAGS to compile step.
+  Argument fileTypeFlag;             // to see if -x flag is mentioned
+  Argument hasOMPTargets;            // If OMP targets is mentioned
+  Argument hasC;                     // options contain a c-style file
   // options contain a cpp-style file (NVCC must force recognition as GPU
   // file)
   Argument hasCXX;
@@ -212,9 +221,9 @@ public:
   virtual const string &getHipLdFlags() const;
   virtual void executeHipCCCmd(vector<string> argv);
 
-  bool readHipInfo(const string hip_path, HipInfo &result) {
-    fs::path path(hip_path);
-    path /= ".hipInfo";
+  bool readHipInfo(const string hip_path_share, HipInfo &result) {
+    std::cout << "Searching for .hipInfo in " << hip_path_share << std::endl;
+    fs::path path(hip_path_share + "/.hipInfo");
     if (!fs::exists(path))
       return false;
 
@@ -264,7 +273,7 @@ void HipBinSpirv::initializeHipLdFlags() {
 }
 
 void HipBinSpirv::initializeHipCFlags() {
-  string hipCFlags;
+  string hipCFlags = hipInfo_.cxxflags;
   // string hipclangIncludePath;
   // hipclangIncludePath = getHipInclude();
   // hipCFlags += " -isystem \"" + hipclangIncludePath + "\"";
@@ -414,19 +423,20 @@ bool HipBinSpirv::detectPlatform() {
   HipInfo hipInfo;
   fs::path currentBinaryPath = fs::canonical("/proc/self/exe");
   currentBinaryPath = currentBinaryPath.parent_path();
-  fs::path sharePath = currentBinaryPath.string() + "/../share";
+  fs::path sharePathBuild = currentBinaryPath.string() + "/../share";
+  fs::path sharePathInstall = var.hipPathEnv_.empty() ? "" : var.hipPathEnv_ + "/share";
   if (readHipInfo( // 1.
-          sharePath, hipInfo)) {
+          sharePathBuild, hipInfo)) {
     detected = hipInfo.runtime.compare("spirv") == 0; // b.
     hipInfo_ = hipInfo;
-  } else if (!var.hipPathEnv_.empty()) { // 2.
-    if (readHipInfo(var.hipPathEnv_, hipInfo)) {
+  } else if (!sharePathInstall.empty()) { // 2.
+    if (readHipInfo(sharePathInstall, hipInfo)) {
       detected = hipInfo.runtime == "spirv";
 
       // check that HIP_RUNTIME found in .hipVars does not conflict with
       // HIP_RUNTIME in the env
       if (detected && !var.hipPlatformEnv_.empty()) {
-        if (var.hipPlatformEnv_ != "spirv" || var.hipPlatformEnv_ != "intel") {
+        if (var.hipPlatformEnv_ != "spirv" && var.hipPlatformEnv_ != "intel") {
           cout << "Error: .hipVars was found in " << var.hipPathEnv_
                << " where HIP_PLATFORM=spirv which conflicts with HIP_PLATFORM "
                   "set in the current environment where HIP_PLATFORM="
@@ -439,18 +449,18 @@ bool HipBinSpirv::detectPlatform() {
     }
   }
 
-  if (!detected && (var.hipPlatformEnv_ == "spirv" || var.hipPlatformEnv_ == "intel")) { // 3.
+  if (!detected && (var.hipPlatformEnv_ == "spirv" ||
+                    var.hipPlatformEnv_ == "intel")) { // 3.
     if (var.hipPathEnv_.empty()) {
       cout << "Error: setting HIP_PLATFORM=spirv/intel requires setting "
               "HIP_PATH=/path/to/CHIP-SPV-INSTALL-DIR/"
            << endl;
       std::exit(EXIT_FAILURE);
     } else {
-      cout
-          << "Error: HIP_PLATFORM=" << var.hipPlatformEnv_
-          << " was set but .hipInfo(generated during CHIP-SPV install) was not "
-             "found in HIP_PATH="
-          << var.hipPathEnv_ << "/share" << endl;
+      cout << "Error: HIP_PLATFORM=" << var.hipPlatformEnv_
+           << " was set but .hipInfo (generated during CHIP-SPV install) was "
+              "not found in HIP_PATH="
+           << var.hipPathEnv_ << "/share" << endl;
       std::exit(EXIT_FAILURE);
     }
   }
@@ -602,6 +612,7 @@ void HipBinSpirv::executeHipCCCmd(vector<string> origArgv) {
     cout << "HIP_INCLUDE_PATH=" << hipIncludePath << endl;
     cout << "HIP_LIB_PATH=" << hipLibPath << endl;
     cout << "DEVICE_LIB_PATH=" << deviceLibPath << endl;
+    cout << "HIP_CXX_FLAGS" << HIPCXXFLAGS << endl;
   }
 
   if (opts.verbose & 0x4) {
