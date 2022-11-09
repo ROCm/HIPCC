@@ -131,8 +131,16 @@ class CompilerOptions {
 public:
   int verbose = 0; // 0x1=commands, 0x2=paths, 0x4=hipcc args
   // bool setStdLib = 0; // set if user explicitly requests -stdlib=libc++
+  /**
+   * Use compilation mode if any of these matches:
+   * - [whitespace]-c[whitespace]
+   * - [whitespace][whatever].cpp[whitespace]
+   * - [whitespace][whatever].c[whitespace]
+   * - [whitespace][whatever].hip[whitespace]
+   * - [whitespace][whatever].cu[whitespace]
+   */
   Argument compile{
-      "(\\s-c\\b|\\s\\S*cpp\\s)"};   // search for *.cpp src files or -c
+      "(\\s-c\\s|\\s\\S*\\.(cpp|c|hip|cu)\\s)"};   // search for *.cpp src files or -c
   Argument compileOnly{"\\s-c\\b"};  // search for -c
   Argument outputObject{"\\s-o\\b"}; // search for -o
   Argument needCXXFLAGS;             // need to add CXX flags to compile step
@@ -265,7 +273,7 @@ void HipBinSpirv::initializeHipLdFlags() {
 }
 
 void HipBinSpirv::initializeHipCFlags() {
-  string hipCFlags;
+  string hipCFlags = hipInfo_.cxxflags;
   // string hipclangIncludePath;
   // hipclangIncludePath = getHipInclude();
   // hipCFlags += " -isystem \"" + hipclangIncludePath + "\"";
@@ -604,6 +612,7 @@ void HipBinSpirv::executeHipCCCmd(vector<string> origArgv) {
     cout << "HIP_INCLUDE_PATH=" << hipIncludePath << endl;
     cout << "HIP_LIB_PATH=" << hipLibPath << endl;
     cout << "DEVICE_LIB_PATH=" << deviceLibPath << endl;
+    cout << "HIP_CXX_FLAGS" << HIPCXXFLAGS << endl;
   }
 
   if (opts.verbose & 0x4) {
