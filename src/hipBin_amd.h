@@ -25,11 +25,11 @@ THE SOFTWARE.
 
 #include "hipBin_base.h"
 #include "hipBin_util.h"
-#include <vector>
+#include <cassert>
+#include <regex>
 #include <string>
 #include <unordered_set>
-#include <cassert>
-
+#include <vector>
 
 // Use (void) to silent unused warnings.
 #define assertm(exp, msg) assert(((void)msg, exp))
@@ -229,9 +229,24 @@ void HipBinAmd::constructCompilerPath() {
       hipClangPath = complierPath;
       hipClangPath /= "bin";
     } else {
-      complierPath = getRoccmPath();
-      hipClangPath = complierPath;
-      hipClangPath /= "llvm/bin";
+      const fs::path rocm_path{getRoccmPath()};
+      if (fs::is_directory(rocm_path/"llvm")) {
+        // LLVM directory in legacy ROCm directory structure
+        hipClangPath = rocm_path/"llvm"/"bin";
+      } else if (fs::is_directory(rocm_path/"lib")) {
+        hipClangPath = "";
+        std::regex llvm_dir_pattern{"^llvm-[[:digit:]]{2}$"};
+        for (auto const& i : fs::directory_iterator{rocm_path/"lib"}) {
+          if (i.is_directory() &&
+              std::regex_search(i.path().filename().string(),
+                                llvm_dir_pattern) &&
+              i.path() > hipClangPath) {
+              hipClangPath = i.path();
+          }
+        }
+        if (fs::is_directory(hipClangPath))
+          hipClangPath /= "bin";
+      }
     }
     complierPath = hipClangPath.string();
   } else {
@@ -239,9 +254,6 @@ void HipBinAmd::constructCompilerPath() {
   }
   hipClangPath_ = complierPath;
 }
-
-
-
 
 // returns clang path.
 const string& HipBinAmd::getCompilerPath() const {
