@@ -183,14 +183,13 @@ HipBinUtil::~HipBinUtil() {
 
 // create temp file with the template name
 string HipBinUtil::mktempFile(string name) {
-  string fileName;
 #if defined(_WIN32) || defined(_WIN64)
-  fileName = _mktemp(&name[0]);
+  _mktemp(&name[0]);
 #else
-  fileName = mkstemp(&name[0]);
+  mkstemp(&name[0]);
 #endif
-  tmpFiles_.push_back(fileName);
-  return fileName;
+  tmpFiles_.push_back(name);
+  return name;
 }
 
 // gets the path of the executable name
