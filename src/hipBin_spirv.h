@@ -222,7 +222,6 @@ public:
   virtual void executeHipCCCmd(vector<string> argv);
 
   bool readHipInfo(const string hip_path_share, HipInfo &result) {
-    std::cout << "Searching for .hipInfo in " << hip_path_share << std::endl;
     fs::path path(hip_path_share + "/.hipInfo");
     if (!fs::exists(path))
       return false;
@@ -691,6 +690,9 @@ void HipBinSpirv::executeHipCCCmd(vector<string> origArgv) {
   if (opts.printLDFlags.present) {
     cout << HIPLDFLAGS;
   }
+
+  // Always add HIP include path for hip_runtime_api.h
+  CMD += "-I/" + hipIncludePath;
 
   // 1st arg is the full path to hipcc
   argv.erase(argv.begin());
