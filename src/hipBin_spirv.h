@@ -611,7 +611,7 @@ void HipBinSpirv::executeHipCCCmd(vector<string> origArgv) {
     cout << "HIP_INCLUDE_PATH=" << hipIncludePath << endl;
     cout << "HIP_LIB_PATH=" << hipLibPath << endl;
     cout << "DEVICE_LIB_PATH=" << deviceLibPath << endl;
-    cout << "HIP_CXX_FLAGS" << HIPCXXFLAGS << endl;
+    cout << "HIP_CXX_FLAGS=" << HIPCXXFLAGS << endl;
   }
 
   if (opts.verbose & 0x4) {
@@ -674,6 +674,12 @@ void HipBinSpirv::executeHipCCCmd(vector<string> origArgv) {
       opts.outputObject.present && !opts.compileOnly.present;
   if (opts.needLDFLAGS.present) {
     CMD += " " + HIPLDFLAGS;
+  }
+
+  // If neither -c nor -o is present, add -c
+  if (!opts.outputObject.present && !opts.compile.present) {
+    CMD += " -c";
+    CMD += " " + HIPCXXFLAGS;
   }
 
   CMD += " " + toolArgs;
