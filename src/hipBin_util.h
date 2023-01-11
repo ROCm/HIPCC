@@ -178,7 +178,8 @@ HipBinUtil *HipBinUtil::instance = 0;
 
 // deleting temp files created
 HipBinUtil::~HipBinUtil() {
-  deleteTempFiles();
+  // deleted right after use so not necessary
+  // deleteTempFiles();
 }
 
 // create temp file with the template name
