@@ -144,7 +144,7 @@ public:
   Argument compileOnly{"\\s-c\\b"};  // search for -c
   Argument outputObject{"\\s-o\\b"}; // search for -o
   Argument needCXXFLAGS;             // need to add CXX flags to compile step
-  Argument needCFLAGS;               // need to add C flags to compile step
+  Argument needCFLAGS{".*\\.c(\\s|$)"};   // need to add C flags to compile step
   Argument needLDFLAGS;              // need to add LDFLAGS to compile step.
   Argument fileTypeFlag;             // to see if -x flag is mentioned
   Argument hasOMPTargets;            // If OMP targets is mentioned
@@ -176,6 +176,7 @@ public:
     compile.parseLine(argStr);
     compileOnly.parseLine(argStr);
     outputObject.parseLine(argStr);
+    needCFLAGS.parseLine(argStr);
 
     printHipVersion.parseLine(argStr);
     printCXXFlags.parseLine(argStr);
@@ -662,11 +663,12 @@ void HipBinSpirv::executeHipCCCmd(vector<string> origArgv) {
   string CMD = compiler;
 
   if (opts.needCFLAGS.present) {
-    CMD += " " + HIPCFLAGS;
+    CMD += " -x c";
+    // CMD += " " + HIPCFLAGS;
   }
 
   opts.needCXXFLAGS.present = opts.compile.present;
-  if (opts.needCXXFLAGS.present) {
+  if (opts.needCXXFLAGS.present && !opts.needCFLAGS.present) {
     CMD += " " + HIPCXXFLAGS;
   }
 
