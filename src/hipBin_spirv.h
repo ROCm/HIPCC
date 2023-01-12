@@ -663,7 +663,7 @@ void HipBinSpirv::executeHipCCCmd(vector<string> origArgv) {
   string CMD = compiler;
 
   if (opts.needCFLAGS.present) {
-    CMD += " -x c";
+    CMD += " -x c -D__HIP_PLATFORM_SPIRV__";
     // CMD += " " + HIPCFLAGS;
   }
 
