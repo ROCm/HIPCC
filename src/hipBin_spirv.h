@@ -112,7 +112,7 @@ public:
    *
    * @param argline string reprenting the campiler invocation
    */
-  void parseLine(string argline) {
+  void parseLine(string &argline) {
     smatch m;
     if (regex_search(argline, m, regexp)) {
       present = true;
@@ -122,7 +122,7 @@ public:
     }
 
     if (present && !passthrough_) {
-      regex_replace(argline, regexp, "");
+      argline = regex_replace(argline, regexp, "");
     }
   }
 };
@@ -629,6 +629,12 @@ void HipBinSpirv::executeHipCCCmd(vector<string> origArgv) {
     HIPLDFLAGS += HIPLDARCHFLAGS;
   }
 
+  // If source present (compile) but excplicit compilation not requested via -c (compileOnly) and output object not requested (outputObject), then add -c compileOnly.
+  if (opts.compile.present && !opts.compileOnly.present && !opts.outputObject.present) {
+    HIPCFLAGS += " -c";
+    HIPCXXFLAGS += " -c";
+  }
+
   // if (opts.hasHIP) {
   //   fs::path bitcodeFs = roccmPath;
   //   bitcodeFs /= "amdgcn/bitcode";
@@ -705,6 +711,9 @@ void HipBinSpirv::executeHipCCCmd(vector<string> origArgv) {
   // 1st arg is the full path to hipcc
   argv.erase(argv.begin());
   for (auto arg : argv) {
+    // Add an additional escape for every "
+    regex r("\"");
+    arg = regex_replace(arg, r, "\"\\\"");
     CMD += " " + arg;
   }
 
