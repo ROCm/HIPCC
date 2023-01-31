@@ -331,28 +331,7 @@ string HipBinAmd::getCppConfig() {
 
 string HipBinAmd::getDeviceLibPath() const {
   const EnvVariables& var = getEnvVariables();
-  const string& rocclrHomePath = getRocclrHomePath();
-  const string& roccmPath = getRoccmPath();
-  fs::path bitCodePath = rocclrHomePath;
-  bitCodePath /= "lib/bitcode";
   string deviceLibPath = var.deviceLibPathEnv_;
-  if (deviceLibPath.empty() && fs::exists(bitCodePath)) {
-    deviceLibPath = bitCodePath.string();
-  }
-
-  if (deviceLibPath.empty()) {
-    fs::path amdgcnBitcode = roccmPath;
-    amdgcnBitcode /= "amdgcn/bitcode";
-    if (fs::exists(amdgcnBitcode)) {
-      deviceLibPath = amdgcnBitcode.string();
-    } else {
-      // This path is to support an older build of the device library
-      // TODO(hipcc): To be removed in the future.
-      fs::path lib = roccmPath;
-      lib /= "lib";
-      deviceLibPath = lib.string();
-    }
-  }
   return deviceLibPath;
 }
 
@@ -876,9 +855,7 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
   }
 
   if (hasHIP) {
-    fs::path bitcodeFs = roccmPath;
-    bitcodeFs /= "amdgcn/bitcode";
-    if (deviceLibPath != bitcodeFs.string()) {
+    if (!deviceLibPath.empty()) {
       string hip_device_lib_str = " --hip-device-lib-path=\""
                                   + deviceLibPath + "\"";
       HIPCXXFLAGS += hip_device_lib_str;
