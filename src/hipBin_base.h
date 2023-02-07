@@ -339,12 +339,18 @@ void HipBinBase::constructRoccmPath() {
     variables_.roccmPathEnv_ = rocm_path_name;
   else if (envVariables_.roccmPathEnv_.empty()) {
     const string& hipPath = getHipPath();
+    //File reorg hip path is /opt/rocm-ver
     fs::path roccm_path(hipPath);
-    roccm_path = roccm_path.parent_path();
     fs::path rocm_agent_enumerator_file(roccm_path);
     rocm_agent_enumerator_file /= "bin/rocm_agent_enumerator";
     if (!fs::exists(rocm_agent_enumerator_file)) {
-      roccm_path = "/opt/rocm";
+      //Backward compatibility hip path is /opt/rocm-ver/hip
+      roccm_path = roccm_path.parent_path();
+      rocm_agent_enumerator_file = roccm_path;
+      rocm_agent_enumerator_file /= "bin/rocm_agent_enumerator";
+      if (!fs::exists(rocm_agent_enumerator_file)) {
+        roccm_path = "/opt/rocm";
+      }
     }
   } else {
     variables_.roccmPathEnv_ = envVariables_.roccmPathEnv_;}
