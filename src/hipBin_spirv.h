@@ -676,6 +676,7 @@ void HipBinSpirv::executeHipCCCmd(vector<string> origArgv) {
   opts.needCXXFLAGS.present = opts.compile.present;
   if (opts.needCXXFLAGS.present && !opts.needCFLAGS.present) {
     CMD += " " + HIPCXXFLAGS;
+    CMD += " -x hip --target=x86_64-linux-gnu";
   }
 
   opts.needLDFLAGS.present =
