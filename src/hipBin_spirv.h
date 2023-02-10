@@ -551,16 +551,30 @@ void HipBinSpirv::printFull() {
   cout << endl;
 }
 
+vector<string> excludedArgs {
+  "--offload=spirv6",
+  "-D__HIP_PLATFORM_SPIRV__",
+  "-D__HIP_PLATFORM_SPIRV__=",
+  "-D__HIP_PLATFORM_SPIRV__=1",
+};
+
+vector<string> argsFilter(vector<string> argsIn) {
+  vector<string> argsOut;
+  for (int i = 0; i < argsIn.size(); i++) {
+    auto found = find(excludedArgs.begin(), excludedArgs.end(), argsIn[i]);
+    if (found == excludedArgs.end())
+      argsOut.push_back(argsIn[i]);
+  }
+  return argsOut;
+}
+
 void HipBinSpirv::executeHipCCCmd(vector<string> origArgv) {
   vector<string> argv;
   // Filter away a possible duplicate --offload=spirv64 flag which can be passed
   // in builds that call hipcc with direct output of hip_config --cpp_flags.
   // We have to include the flag in the --cpp_flags output to retain the
   // option to use clang++ directly for HIP compilation instead of hipcc.
-  for (int i = 0; i < origArgv.size(); i++) {
-    if (origArgv[i] != "--offload=spirv64")
-      argv.push_back(origArgv[i]);
-  }
+  argv = argsFilter(origArgv);
 
   if (argv.size() < 2) {
     cout << "No Arguments passed, exiting ...\n";
@@ -668,9 +682,9 @@ void HipBinSpirv::executeHipCCCmd(vector<string> origArgv) {
   compiler = getHipCC();
   string CMD = compiler;
 
+  CMD += " -D__HIP_PLATFORM_SPIRV__=";
   if (opts.needCFLAGS.present) {
-    CMD += " -x c -D__HIP_PLATFORM_SPIRV__";
-    // CMD += " " + HIPCFLAGS;
+    CMD += " -x c";
   }
 
   opts.needCXXFLAGS.present = opts.compile.present;
