@@ -552,7 +552,7 @@ void HipBinSpirv::printFull() {
 }
 
 vector<string> excludedArgs {
-  "--offload=spirv6",
+  "--offload=spirv64",
   "-D__HIP_PLATFORM_SPIRV__",
   "-D__HIP_PLATFORM_SPIRV__=",
   "-D__HIP_PLATFORM_SPIRV__=1",
