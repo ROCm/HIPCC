@@ -877,6 +877,10 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
     }
     if (!windows) {
       HIPLDFLAGS += "  --rtlib=compiler-rt -unwindlib=libgcc";
+    } else {
+      // to avoid using dk linker or MSVC linker
+      HIPLDFLAGS += " -fuse-ld=lld";
+      HIPLDFLAGS += " --ld-path=$HIP_CLANG_PATH/lld-link.exe";
     }
   }
 
