@@ -21,6 +21,12 @@ def hipBuildTest(String backendLabel) {
               url: 'https://github.com/ROCm-Developer-Tools/hipamd'
             }
 
+            // Clone hip-test repository
+            dir("${WORKSPACE}/hip-tests") {
+              git branch: 'develop',
+              url: 'https://github.com/ROCm-Developer-Tools/hip-tests'
+            }
+
             // Clone vdi and opencl for only amd backend server
             if (backendLabel =~ /.*amd.*/) {  
                dir("${WORKSPACE}/ROCm-OpenCL-Runtime") {
@@ -52,19 +58,20 @@ def hipBuildTest(String backendLabel) {
 
         stage("Build - Catch2 framework") {
             // Running the build on hipamd workspace
-            dir("${WORKSPACE}/hipamd") {
+            // dir("${WORKSPACE}/hipamd") {
+            dir("${WORKSPACE}/hip-tests") {
                 sh  """#!/usr/bin/env bash
                     set -x
                     mkdir -p build
                     cd build
                     # Check if backend label contains string "amd" or backend host is a server with amd gpu
                     if [[ $backendLabel =~ amd ]]; then
-                        cmake -DHIP_CATCH_TEST=1 -DHIP_PATH=\$PWD/install -DHIPCC_BIN_DIR=\$HIPCC_DIR/build -DHIP_COMMON_DIR=\$HIP_DIR -DAMD_OPENCL_PATH=\$OPENCL_DIR -DROCCLR_PATH=\$ROCclr_DIR -DCMAKE_PREFIX_PATH="/opt/rocm/" -DCMAKE_INSTALL_PREFIX=\$PWD/install ..
+                        cmake -DHIP_PLATFORM=amd -DHIP_PATH=\$PWD/install -DHIPCC_BIN_DIR=\$HIPCC_DIR/build -DHIP_COMMON_DIR=\$HIP_DIR -DAMD_OPENCL_PATH=\$OPENCL_DIR -DROCCLR_PATH=\$ROCclr_DIR -DCMAKE_PREFIX_PATH="/opt/rocm/" -DCMAKE_INSTALL_PREFIX=\$PWD/install ..
                     else
                         export HIP_PLATFORM=nvidia
                         export HIP_COMPILER=nvcc
                         export HIP_RUNTIME=cuda
-                        cmake -DHIP_CATCH_TEST=1 -DHIP_PATH=\$PWD/install -DHIPCC_BIN_DIR=\$HIPCC_DIR/build -DHIP_COMMON_DIR=$HIP_DIR -DCMAKE_INSTALL_PREFIX=\$PWD/install ..
+                        cmake -DHIP_PLATFORM=nvidia -DHIP_PATH=\$PWD/install -DHIPCC_BIN_DIR=\$HIPCC_DIR/build -DHIP_COMMON_DIR=$HIP_DIR -DCMAKE_INSTALL_PREFIX=\$PWD/install ..
                     fi
                     make install  -j\$(nproc)
                     if [[ $backendLabel =~ amd ]]; then
@@ -77,15 +84,11 @@ def hipBuildTest(String backendLabel) {
         }
 
         stage('HIP Unit Tests - Catch2 framework') {
-            dir("${WORKSPACE}/hipamd/build") {
+            // dir("${WORKSPACE}/hipamd/build") {
+            dir("${WORKSPACE}/hip-tests/build") {
                 sh  """#!/usr/bin/env bash
                     set -x
-                    # Check if backend label contains string "amd" or backend host is a server with amd gpu
-                    if [[ $backendLabel =~ amd ]]; then
-                        LLVM_PATH=/opt/rocm/llvm ctest -E 'Unit_hiprtc_saxpy'
-                    else
-                        make test
-                    fi
+                    ctest
                     """
             }
         }
