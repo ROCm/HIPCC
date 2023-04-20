@@ -140,7 +140,7 @@ public:
    * - [whitespace][whatever].cu[whitespace]
    */
   Argument compile{
-      "(\\s-c\\s|\\s\\S*\\.(cpp|cc|c|hip|cu)\\s)"};   // search for *.cpp src files or -c
+      "(\\s-c\\s|\\s\\S*\\.(cpp|cc|c|hip|cu)\\b)"};   // search for *.cpp src files or -c
   Argument compileOnly{"\\s-c\\b"};  // search for -c
   Argument outputObject{"\\s-o\\b"}; // search for -o
   Argument needCXXFLAGS;             // need to add CXX flags to compile step
@@ -637,16 +637,17 @@ void HipBinSpirv::executeHipCCCmd(vector<string> origArgv) {
     cout << endl;
   }
 
+  // If source present (compile) but excplicit compilation not requested via -c (compileOnly) and output object not requested (outputObject), then add -c compileOnly.
+  if (opts.compile.present && !opts.compileOnly.present && !opts.outputObject.present) {
+    opts.compileOnly.present = true;
+    HIPCFLAGS += " -c";
+    HIPCXXFLAGS += " -c";
+  }
+
   // Add --hip-link only if it is compile only and -fgpu-rdc is on.
   if (opts.rdc.present && !opts.compileOnly.present) {
     HIPLDFLAGS += " --hip-link";
     HIPLDFLAGS += HIPLDARCHFLAGS;
-  }
-
-  // If source present (compile) but excplicit compilation not requested via -c (compileOnly) and output object not requested (outputObject), then add -c compileOnly.
-  if (opts.compile.present && !opts.compileOnly.present && !opts.outputObject.present) {
-    HIPCFLAGS += " -c";
-    HIPCXXFLAGS += " -c";
   }
 
   // if (opts.hasHIP) {
