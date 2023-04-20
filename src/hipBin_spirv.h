@@ -140,7 +140,7 @@ public:
    * - [whitespace][whatever].cu[whitespace]
    */
   Argument compile{
-      "(\\s-c\\s|\\s\\S*\\.(cpp|cc|c|hip|cu)(?:\s|$))"};   // search for *.cpp src files or -c
+      "(\\s-c\\s|\\s\\S*\\.(cpp|cc|c|hip|cu)(?:\\s|$))"};   // search for *.cpp src files or -c
   Argument compileOnly{"\\s-c\\b"};  // search for -c
   Argument outputObject{"\\s-o\\b"}; // search for -o
   Argument needCXXFLAGS;             // need to add CXX flags to compile step
