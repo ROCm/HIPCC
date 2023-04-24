@@ -151,7 +151,9 @@ pure-eval==0.2.2
 pycparser==2.21
     # via cffi
 pydata-sphinx-theme==0.13.3
-    # via sphinx-book-theme
+    # via
+    #   rocm-docs-core
+    #   sphinx-book-theme
 pygithub==1.57
     # via rocm-docs-core
 pygments==2.15.0
@@ -182,8 +184,8 @@ requests==2.28.2
     # via
     #   pygithub
     #   sphinx
-rocm-docs-core==0.2.0
-    # via -r .sphinx/requirements.in
+rocm-docs-core==0.6.0
+    # via -r requirements.in
 six==1.16.0
     # via
     #   asttokens
