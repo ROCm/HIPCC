@@ -335,7 +335,7 @@ foreach $arg (@ARGV)
         $arg = "--cuda-device-only";
     }
 
-    if($trimarg eq '--version') {
+    if($trimarg eq '--version' or $trimarg eq '-v') {
         $printHipVersion = 1;
     }
     if($trimarg eq '--short-version') {
@@ -552,8 +552,8 @@ if ($buildDeps and $HIP_PLATFORM eq 'amd') {
 # pass-through CPP mode.
 
 if ($HIP_PLATFORM eq "amd") {
-    # Set default optimization level to -O3 for hip-clang.
-    if ($optArg eq "") {
+    # Set default optimization level to -O3 for hip-clang
+    if ($optArg eq "" and ($needCFLAGS or $needCFLAGS)) {
         $HIPCXXFLAGS .= " -O3";
         $HIPCFLAGS .= " -O3";
         $HIPLDFLAGS .= " -O3";
@@ -578,7 +578,7 @@ if ($HIP_PLATFORM eq "amd") {
         }
     }
 
-    if (!$compileOnly) {
+    if (!$compileOnly or $needLDFLAGS) {
         $HIPLDFLAGS .= " --hip-link";
         if ($rdc) {
             $HIPLDFLAGS .= $HIPLDARCHFLAGS;
