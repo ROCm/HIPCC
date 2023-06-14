@@ -375,7 +375,9 @@ void HipBinNvidia::executeHipCCCmd(vector<string> argv) {
     for (unsigned int i = 2; i < argv.size(); i++) {
       string isaarg = argv.at(i);
       ISACMD += " ";
-      ISACMD += isaarg;
+      if (!hipBinUtilPtr_->substringPresent(isaarg,"--rocm-path=")) {
+        ISACMD += isaarg;
+      }
     }
     if (verbose & 0x1) {
       cout<< "hipcc-cmd: " << ISACMD << "\n";
@@ -538,7 +540,7 @@ void HipBinNvidia::executeHipCCCmd(vector<string> argv) {
     }
     // Windows needs different quoting, ignore for now
     if (os != windows && escapeArg) {
-      regex reg("[^-a-zA-Z0-9_=+,.\/]");
+      regex reg("[^-a-zA-Z0-9_=+,.\\/]");
       arg = regex_replace(arg, reg, "\\$&");
     }
     if (!swallowArg)
