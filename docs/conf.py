@@ -6,6 +6,9 @@
 
 from rocm_docs import ROCmDocs
 
+
+external_projects_current_project = "hipcc"
+
 docs_core = ROCmDocs("HIPCC Documentation")
 docs_core.setup()
 
