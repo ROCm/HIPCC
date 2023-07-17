@@ -143,19 +143,12 @@ const string& HipBinAmd::getHipLdFlags() const {
 
 
 void HipBinAmd::initializeHipLdFlags() {
-  string hipLibPath;
   string hipLdFlags;
   const string& hipClangPath = getCompilerPath();
   // If $HIPCC clang++ is not compiled, use clang instead
   string hipCC = "\"" + hipClangPath + "/clang++";
   if (!fs::exists(hipCC)) {
     hipLdFlags = "--driver-mode=g++";
-  }
-  hipLibPath = getHipLibPath();
-  hipLdFlags += " -L\"" + hipLibPath + "\"";
-  const OsType& os = getOSInfo();
-  if (os == windows) {
-    hipLdFlags += " -lamdhip64";
   }
   hipLdFlags_ = hipLdFlags;
 }
@@ -222,13 +215,16 @@ void HipBinAmd::constructCompilerPath() {
     fs::path hipClangPath;
     const OsType& osInfo = getOSInfo();
     if (osInfo == windows) {
-      compilerPath = getHipPath();
-      hipClangPath = compilerPath;
-      hipClangPath /= "bin";
+      complierPath = getHipPath();
+      hipClangPath = complierPath;
     } else {
-      compilerPath = getRocmPath();
-      hipClangPath = compilerPath;
+      complierPath = getRoccmPath();
+      hipClangPath = complierPath;
+    }
+    if (fs::exists("llvm/bin/clang++")) {
       hipClangPath /= "llvm/bin";
+    } else {
+      hipClangPath /= "bin";
     }
     compilerPath = hipClangPath.string();
   } else {
@@ -386,17 +382,13 @@ bool HipBinAmd::detectPlatform() {
 string HipBinAmd::getHipLibPath() const {
   string hipLibPath;
   const Variables& env = getEnvVariables();
-  if (env.hipLibPath_.empty()) {
-    const string& rocclrHomePath = getRocclrHomePath();
-    fs::path libPath = rocclrHomePath;
-    libPath /= "lib";
-    hipLibPath = libPath.string();
+  if (!env.hipLibPath_.empty()) {
+    hipLibPath = env.hipLibPath_;
   }
-  if (hipLibPath.empty()) {
-    const string& hipPath = getHipPath();
-    fs::path libPath = hipPath;
-    libPath /= "lib";
-    hipLibPath = libPath.string();
+  else if (!env.hipPathEnv_.empty()) {
+    fs::path p = env.hipLibPathEnv_;
+    p /= "lib";
+    hipLibPath = p.string();
   }
   return hipLibPath;
 }
@@ -501,8 +493,6 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
   bool printLDFlags = 0;       // print HIPLDFLAGS
   bool runCmd = 1;
   bool buildDeps = 0;
-  bool linkType = 1;
-  bool setLinkType = 0;
   string hsacoVersion;
   bool funcSupp = 0;      // enable function support
   bool rdc = 0;           // whether -fgpu-rdc is on
@@ -617,14 +607,13 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
       compileOnly = 1;
       buildDeps = 1;
     }
-    if ((trimarg == "-use-staticlib") && (setLinkType == 0)) {
-      linkType = 0;
-      setLinkType = 1;
-      swallowArg = 1;
+    if ((trimarg == "-use-staticlib")) {
+      std::cerr << "Warning: The -use-staticlib option has been deprecated and is no longer needed.\n";
+      swallowArg = true;
     }
-    if ((trimarg == "-use-sharedlib") && (setLinkType == 0)) {
-      linkType = 1;
-      setLinkType = 1;
+    if ((trimarg == "-use-sharedlib")) {
+      std::cerr << "Warning: The -use-sharedlib option has been deprecated and is no longer needed.\n";
+      swallowArg = true;
     }
     if (hipBinUtilPtr_->stringRegexMatch(arg, "^-O.*")) {
       optArg = arg;
@@ -727,7 +716,7 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
     // Important to have all of '-Xlinker' in the set of unquoted characters.
     // Windows needs different quoting, ignore for now
     if (os != windows && escapeArg) {
-      regex reg("[^-a-zA-Z0-9_=+,.\/]");
+      regex reg("[^-a-zA-Z0-9_=+,.\\/]");
       arg = regex_replace(arg, reg, "\\$&");
     }
     if (!swallowArg)
@@ -847,11 +836,6 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
   if (buildDeps) {
     HIPCXXFLAGS += " --cuda-host-only";
   }
-  // Add --hip-link only if it is compile only and -fgpu-rdc is on.
-  if (rdc && !compileOnly) {
-    HIPLDFLAGS += " --hip-link";
-    HIPLDFLAGS += HIPLDARCHFLAGS;
-  }
 
   // hipcc currrently requires separate compilation of source files,
   // ie it is not possible to pass
@@ -885,27 +869,21 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
       HIPCXXFLAGS += hip_device_lib_str;
     }
   }
-  if (os != windows) {
-    HIPLDFLAGS += " -lgcc_s -lgcc -lpthread -lm -lrt";
-  }
 
-  if (os != windows && !compileOnly) {
-    string hipClangVersion, toolArgTemp;
-    if (linkType == 0) {
-      toolArgTemp = " -L"+ hipLibPath + "-lamdhip64 -L" +
-                      rocmPath+ "/lib -lhsa-runtime64 -ldl -lnuma " + toolArgs;
-      toolArgs = toolArgTemp;
-    } else {
-      toolArgTemp =  toolArgs + " -Wl,-rpath=" + hipLibPath + ":"
-                    + roccmPath+"/lib -lamdhip64 ";
-      toolArgs =  toolArgTemp;
+  if (!compileOnly) {
+    string hip_path = getHipLibPath();
+    if (!hip_path.empty()) {
+      HIPLDFLAGS += " -L" + hip_path;
     }
-
-    hipClangVersion = getCompilerVersion();
-    // To support __fp16 and _Float16, explicitly link with compiler-rt
-    toolArgs += " -L" + hipClangPath + "/../lib/clang/" +
-                hipClangVersion + "/lib/linux -lclang_rt.builtins-x86_64 ";
+    HIPLDFLAGS += " --hip-link";
+    if (rdc) {
+      HIPLDFLAGS += HIPLDARCHFLAGS;
+    }
+    if (!windows) {
+      HIPLDFLAGS += "  --rtlib=compiler-rt -unwindlib=libgcc";
+    }
   }
+  
   if (!var.hipccCompileFlagsAppend_.empty()) {
     HIPCXXFLAGS += " " + var.hipccCompileFlagsAppend_ + " ";
     HIPCFLAGS += " " + var.hipccCompileFlagsAppend_ + " ";
