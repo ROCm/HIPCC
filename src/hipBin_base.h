@@ -138,50 +138,50 @@ struct PlatformInfo {
   OsType os;
 };
 
-struct EnvVariables {
+struct Variables {
   string path_ = "";
-  string hipPathEnv_ = "";
-  string hipRocclrPathEnv_ = "";
-  string roccmPathEnv_ = "";
-  string cudaPathEnv_ = "";
-  string hsaPathEnv_ = "";
-  string hipClangPathEnv_ = "";
-  string hipPlatformEnv_ = "";
-  string hipCompilerEnv_ = "";
-  string hipRuntimeEnv_ = "";
-  string ldLibraryPathEnv_ = "";
-  string verboseEnv_ = "";
-  string hipccCompileFlagsAppendEnv_ = "";
-  string hipccLinkFlagsAppendEnv_ = "";
-  string hipLibPathEnv_ = "";
-  string deviceLibPathEnv_ = "";
-  string hipClangHccCompactModeEnv_ = "";
-  string hipCompileCxxAsHipEnv_ = "";
-  string hccAmdGpuTargetEnv_ = "";
-  friend std::ostream& operator <<(std::ostream& os, const EnvVariables& var) {
+  string hipPath_ = "";
+  string hipRocclrPath_ = "";
+  string rocmPath_ = "";
+  string cudaPath_ = "";
+  string hsaPath_ = "";
+  string hipClangPath_ = "";
+  string hipPlatform_ = "";
+  string hipCompiler_ = "";
+  string hipRuntime_ = "";
+  string ldLibraryPath_ = "";
+  string verbose_ = "";
+  string hipccCompileFlagsAppend_ = "";
+  string hipccLinkFlagsAppend_ = "";
+  string hipLibPath_ = "";
+  string deviceLibPath_ = "";
+  string hipClangHccCompactMode_ = "";
+  string hipCompileCxxAsHip_ = "";
+  string hccAmdGpuTarget_ = "";
+  friend std::ostream& operator <<(std::ostream& os, const Variables& var) {
     os << "Path: "                           << var.path_ << endl;
-    os << "Hip Path: "                       << var.hipPathEnv_ << endl;
-    os << "Hip Rocclr Path: "                << var.hipRocclrPathEnv_ << endl;
-    os << "Roccm Path: "                     << var.roccmPathEnv_ << endl;
-    os << "Cuda Path: "                      << var.cudaPathEnv_ << endl;
-    os << "Hsa Path: "                       << var.hsaPathEnv_ << endl;
-    os << "Hip Clang Path: "                 << var.hipClangPathEnv_ << endl;
-    os << "Hip Platform: "                   << var.hipPlatformEnv_ << endl;
-    os << "Hip Compiler: "                   << var.hipCompilerEnv_ << endl;
-    os << "Hip Runtime: "                    << var.hipRuntimeEnv_ << endl;
-    os << "LD Library Path: "                << var.ldLibraryPathEnv_ << endl;
-    os << "Verbose: "                        << var.verboseEnv_ << endl;
+    os << "Hip Path: "                       << var.hipPath_ << endl;
+    os << "Hip Rocclr Path: "                << var.hipRocclrPath_ << endl;
+    os << "Rocm Path: "                     << var.rocmPath_ << endl;
+    os << "Cuda Path: "                      << var.cudaPath_ << endl;
+    os << "Hsa Path: "                       << var.hsaPath_ << endl;
+    os << "Hip Clang Path: "                 << var.hipClangPath_ << endl;
+    os << "Hip Platform: "                   << var.hipPlatform_ << endl;
+    os << "Hip Compiler: "                   << var.hipCompiler_ << endl;
+    os << "Hip Runtime: "                    << var.hipRuntime_ << endl;
+    os << "LD Library Path: "                << var.ldLibraryPath_ << endl;
+    os << "Verbose: "                        << var.verbose_ << endl;
     os << "Hipcc Compile Flags Append: "     <<
-           var.hipccCompileFlagsAppendEnv_ << endl;
+           var.hipccCompileFlagsAppend_ << endl;
     os << "Hipcc Link Flags Append: "        <<
-           var.hipccLinkFlagsAppendEnv_ << endl;
-    os << "Hip lib Path: "                   << var.hipLibPathEnv_ << endl;
-    os << "Device lib Path: "                << var.deviceLibPathEnv_ << endl;
+           var.hipccLinkFlagsAppend_ << endl;
+    os << "Hip lib Path: "                   << var.hipLibPath_ << endl;
+    os << "Device lib Path: "                << var.deviceLibPath_ << endl;
     os << "Hip Clang HCC Compact mode: "     <<
-           var.hipClangHccCompactModeEnv_ << endl;
+           var.hipClangHccCompactMode_ << endl;
     os << "Hip Compile Cxx as Hip: "         <<
-           var.hipCompileCxxAsHipEnv_ << endl;
-    os << "Hcc Amd Gpu Target: "             << var.hccAmdGpuTargetEnv_ << endl;
+           var.hipCompileCxxAsHip_ << endl;
+    os << "Hcc Amd Gpu Target: "             << var.hccAmdGpuTarget_ << endl;
     return os;
   }
 };
@@ -189,7 +189,7 @@ struct EnvVariables {
 enum HipBinCommand {
   unknown = -1,
   path,
-  roccmpath,
+  rocmpath,
   cpp_config,
   compiler,
   platform,
@@ -231,10 +231,11 @@ class HipBinBase {
   // Common functions used by all platforms
   void getSystemInfo() const;
   void printEnvironmentVariables() const;
-  const EnvVariables& getEnvVariables() const;
+  const Variables& getEnvVariables() const;
+  const Variables& getVariables() const;
   const OsType& getOSInfo() const;
   const string& getHipPath() const;
-  const string& getRoccmPath() const;
+  const string& getRocmPath() const;
   const string& getHipVersion() const;
   void printUsage() const;
   bool canRunCompiler(string exeName, string& cmdOut);
@@ -253,7 +254,7 @@ class HipBinBase {
   void readHipVersion();
   
  private:
-  EnvVariables envVariables_, variables_;
+  Variables envVariables_, variables_;
   OsType osInfo_;
   string hipVersion_;
 
@@ -280,52 +281,52 @@ void HipBinBase::readEnvVariables() {
   if (const char* path = std::getenv(PATH))
     envVariables_.path_ = path;
   if (const char* hip = std::getenv(HIP_PATH))
-    envVariables_.hipPathEnv_ = hip;
+    envVariables_.hipPath_ = hip;
   if (const char* hip_rocclr = std::getenv(HIP_ROCCLR_HOME))
-    envVariables_.hipRocclrPathEnv_ = hip_rocclr;
+    envVariables_.hipRocclrPath_ = hip_rocclr;
   if (const char* roccm = std::getenv(ROCM_PATH))
-    envVariables_.roccmPathEnv_ = roccm;
+    envVariables_.rocmPath_ = roccm;
   if (const char* cuda = std::getenv(CUDA_PATH))
-    envVariables_.cudaPathEnv_ = cuda;
+    envVariables_.cudaPath_ = cuda;
   if (const char* hsa = std::getenv(HSA_PATH))
-    envVariables_.hsaPathEnv_ = hsa;
+    envVariables_.hsaPath_ = hsa;
   if (const char* hipClang = std::getenv(HIP_CLANG_PATH))
-    envVariables_.hipClangPathEnv_ = hipClang;
+    envVariables_.hipClangPath_ = hipClang;
   if (const char* hipPlatform = std::getenv(HIP_PLATFORM))
-    envVariables_.hipPlatformEnv_ = hipPlatform;
+    envVariables_.hipPlatform_ = hipPlatform;
   if (const char* hipCompiler = std::getenv(HIP_COMPILER))
-    envVariables_.hipCompilerEnv_ = hipCompiler;
+    envVariables_.hipCompiler_ = hipCompiler;
   if (const char* hipRuntime = std::getenv(HIP_RUNTIME))
-    envVariables_.hipRuntimeEnv_ = hipRuntime;
+    envVariables_.hipRuntime_ = hipRuntime;
   if (const char* ldLibaryPath = std::getenv(LD_LIBRARY_PATH))
-    envVariables_.ldLibraryPathEnv_ = ldLibaryPath;
+    envVariables_.ldLibraryPath_ = ldLibaryPath;
   if (const char* hccAmdGpuTarget = std::getenv(HCC_AMDGPU_TARGET))
-    envVariables_.hccAmdGpuTargetEnv_ = hccAmdGpuTarget;
+    envVariables_.hccAmdGpuTarget_ = hccAmdGpuTarget;
   if (const char* verbose = std::getenv(HIPCC_VERBOSE))
-    envVariables_.verboseEnv_ = verbose;
+    envVariables_.verbose_ = verbose;
   if (const char* hipccCompileFlagsAppend =
       std::getenv(HIPCC_COMPILE_FLAGS_APPEND))
-    envVariables_.hipccCompileFlagsAppendEnv_ = hipccCompileFlagsAppend;
+    envVariables_.hipccCompileFlagsAppend_ = hipccCompileFlagsAppend;
   if (const char* hipccLinkFlagsAppend = std::getenv(HIPCC_LINK_FLAGS_APPEND))
-    envVariables_.hipccLinkFlagsAppendEnv_ = hipccLinkFlagsAppend;
+    envVariables_.hipccLinkFlagsAppend_ = hipccLinkFlagsAppend;
   if (const char* hipLibPath = std::getenv(HIP_LIB_PATH))
-    envVariables_.hipLibPathEnv_ = hipLibPath;
+    envVariables_.hipLibPath_ = hipLibPath;
   if (const char* deviceLibPath = std::getenv(DEVICE_LIB_PATH))
-    envVariables_.deviceLibPathEnv_ = deviceLibPath;
+    envVariables_.deviceLibPath_ = deviceLibPath;
   if (const char* hipClangHccCompactMode =
       std::getenv(HIP_CLANG_HCC_COMPAT_MODE))
-    envVariables_.hipClangHccCompactModeEnv_ = hipClangHccCompactMode;
+    envVariables_.hipClangHccCompactMode_ = hipClangHccCompactMode;
   if (const char* hipCompileCxxAsHip = std::getenv(HIP_COMPILE_CXX_AS_HIP))
-    envVariables_.hipCompileCxxAsHipEnv_ = hipCompileCxxAsHip;
+    envVariables_.hipCompileCxxAsHip_ = hipCompileCxxAsHip;
 }
 
 // constructs the HIP path
 void HipBinBase::constructHipPath() {
   fs::path full_path(hipBinUtilPtr_->getSelfPath());
-  if (envVariables_.hipPathEnv_.empty())
-    variables_.hipPathEnv_ = (full_path.parent_path()).string();
+  if (envVariables_.hipPath_.empty())
+    variables_.hipPath_ = (full_path.parent_path()).string();
   else
-    variables_.hipPathEnv_ = envVariables_.hipPathEnv_;
+    variables_.hipPath_ = envVariables_.hipPath_;
 }
 
 
@@ -336,8 +337,8 @@ void HipBinBase::constructRoccmPath() {
 
   // chose the --rocm-path option first, if specified.
   if (!rocm_path_name.empty())
-    variables_.roccmPathEnv_ = rocm_path_name;
-  else if (envVariables_.roccmPathEnv_.empty()) {
+    variables_.rocmPath_ = rocm_path_name;
+  else if (envVariables_.rocmPath_.empty()) {
     const string& hipPath = getHipPath();
     fs::path roccm_path(hipPath);
     roccm_path = roccm_path.parent_path();
@@ -347,7 +348,7 @@ void HipBinBase::constructRoccmPath() {
       roccm_path = "/opt/rocm";
     }
   } else {
-    variables_.roccmPathEnv_ = envVariables_.roccmPathEnv_;}
+    variables_.rocmPath_ = envVariables_.rocmPath_;}
 }
 
 // reads the Hip Version
@@ -395,7 +396,7 @@ void HipBinBase::getSystemInfo() const {
   }
 }
 
-// prints the envirnoment variables
+// prints the environment variables
 void HipBinBase::printEnvironmentVariables() const {
   const OsType& os = getOSInfo();
   if (os == windows) {
@@ -410,11 +411,15 @@ void HipBinBase::printEnvironmentVariables() const {
   }
 }
 
-// returns envirnoment variables
-const EnvVariables& HipBinBase::getEnvVariables() const {
+// returns environment variables
+const Variables& HipBinBase::getEnvVariables() const {
   return envVariables_;
 }
 
+// returns variables
+const Variables& HipBinBase::getVariables() const {
+  return variables_;
+}
 
 // returns the os information
 const OsType& HipBinBase::getOSInfo() const {
@@ -423,12 +428,12 @@ const OsType& HipBinBase::getOSInfo() const {
 
 // returns the HIP path
 const string& HipBinBase::getHipPath() const {
-  return variables_.hipPathEnv_;
+  return variables_.hipPath_;
 }
 
 // returns the Roccm path
-const string& HipBinBase::getRoccmPath() const {
-  return variables_.roccmPathEnv_;
+const string& HipBinBase::getRocmPath() const {
+  return variables_.rocmPath_;
 }
 
 // returns the Hip Version
@@ -441,7 +446,7 @@ void HipBinBase::printUsage() const {
   cout << "usage: hipconfig [OPTIONS]\n";
   cout << "  --path,  -p        :"
   " print HIP_PATH (use env var if set, else determine from hipconfig path)\n";
-  cout << "  --rocmpath,  -R    :"
+  cout << "  --rocm-path,  -R    :"
   " print ROCM_PATH (use env var if set,"
   " else determine from hip path or /opt/rocm)\n";
   cout << "  --cpp_config, -C   : print C++ compiler options\n";
@@ -488,9 +493,9 @@ HipBinCommand HipBinBase::gethipconfigCmd(string argument) {
   vector<string> pathStrs = { "-p", "--path", "-path", "--p" };
   if (hipBinUtilPtr_->checkCmd(pathStrs, argument))
     return path;
-  vector<string> rocmPathStrs = { "-R", "--rocmpath", "-rocmpath", "--R" };
+  vector<string> rocmPathStrs = { "-R", "--rocm-path", "-rocm-path", "--R" };
   if (hipBinUtilPtr_->checkCmd(rocmPathStrs, argument))
-    return roccmpath;
+    return rocmpath;
   vector<string> cppConfigStrs = { "-C", "--cpp_config",
                                    "-cpp_config", "--C", };
   if (hipBinUtilPtr_->checkCmd(cppConfigStrs, argument))
