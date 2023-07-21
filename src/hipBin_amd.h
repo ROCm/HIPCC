@@ -719,7 +719,7 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
       arg = regex_replace(arg, reg, "\\$&");
     }
     if (!swallowArg)
-      toolArgs += " " + arg;
+      toolArgs += " \"" + arg +"\"";
     prevArg = arg;
   }  // end of ARGV Processing Loop
 
