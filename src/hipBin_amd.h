@@ -718,8 +718,12 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
       regex reg("[^-a-zA-Z0-9_=+,.\\/]");
       arg = regex_replace(arg, reg, "\\$&");
     }
-    if (!swallowArg)
-      toolArgs += " " + arg;
+    if (!swallowArg) {
+      if (os == windows)
+        toolArgs += " \"" + arg + "\"";
+      else
+        toolArgs += " " + arg;
+    }
     prevArg = arg;
   }  // end of ARGV Processing Loop
 
