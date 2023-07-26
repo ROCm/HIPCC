@@ -214,6 +214,7 @@ if ($HIP_PLATFORM eq "amd") {
 }
 
 # Add paths to common HIP includes:
+# Hello World!
 $HIPCXXFLAGS .= " -isystem \"$HIP_INCLUDE_PATH\"" ;
 $HIPCFLAGS .= " -isystem \"$HIP_INCLUDE_PATH\"" ;
 
