@@ -222,7 +222,8 @@ void HipBinAmd::constructCompilerPath() {
       complierPath = getRoccmPath();
       hipClangPath = complierPath;
     }
-    if (fs::exists("llvm/bin/clang++")) {
+
+    if (fs::exists(complierPath + "llvm/bin/clang++")) {
       hipClangPath /= "llvm/bin";
     } else {
       hipClangPath /= "bin";
