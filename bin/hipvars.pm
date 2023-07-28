@@ -26,7 +26,7 @@ use Cwd;
 use File::Basename;
 
 $HIP_BASE_VERSION_MAJOR = "5";
-$HIP_BASE_VERSION_MINOR = "5";
+$HIP_BASE_VERSION_MINOR = "7";
 $HIP_BASE_VERSION_PATCH = "0";
 
 #---
@@ -61,6 +61,7 @@ sub can_run {
 }
 
 $isWindows =  ($^O eq 'MSWin32' or $^O eq 'msys');
+$doubleQuote = "\"";
 
 #
 # TODO: Fix rpath LDFLAGS settings
@@ -86,6 +87,10 @@ if (-e "$HIP_PATH/bin/rocm_agent_enumerator") {
     $ROCM_PATH=$ENV{'ROCM_PATH'} // "/opt/rocm";
 }
 $CUDA_PATH=$ENV{'CUDA_PATH'} // '/usr/local/cuda';
+if ($isWindows and defined $ENV{'CUDA_PATH'}) {
+  $CUDA_PATH =~ s/^"(.*)"$/$1/;
+  $CUDA_PATH =~ s/\\/\//g;
+}
 
 # Windows/Distro's have a different structure, all binaries are with hipcc
 if ($isWindows or -e "$HIP_PATH/bin/clang") {
@@ -124,9 +129,9 @@ if (defined $HIP_RUNTIME and $HIP_RUNTIME eq "rocclr" and !defined $HIP_ROCCLR_H
 }
 
 if (not defined $HIP_PLATFORM) {
-    if (can_run("\"$HIP_CLANG_PATH/clang++\"") or can_run("clang++")) {
+    if (can_run($doubleQuote . "$HIP_CLANG_PATH/clang++" . $doubleQuote) or can_run("clang++")) {
         $HIP_PLATFORM = "amd";
-    } elsif (can_run("$CUDA_PATH/bin/nvcc") or can_run("nvcc")) {
+    } elsif (can_run($doubleQuote . "$CUDA_PATH/bin/nvcc" . $doubleQuote) or can_run("nvcc")) {
         $HIP_PLATFORM = "nvidia";
         $HIP_COMPILER = "nvcc";
         $HIP_RUNTIME = "cuda";
@@ -154,7 +159,11 @@ if ($HIP_COMPILER eq "clang") {
 #---
 # Read .hipVersion
 my %hipVersion = ();
-parse_config_file("$hipvars::HIP_PATH/bin/.hipVersion", \%hipVersion);
+if ($isWindows) {
+    parse_config_file("$hipvars::HIP_PATH/bin/.hipVersion", \%hipVersion);
+} else {
+    parse_config_file("$hipvars::HIP_PATH/share/hip/version", \%hipVersion);
+}
 $HIP_VERSION_MAJOR = $hipVersion{'HIP_VERSION_MAJOR'} // $HIP_BASE_VERSION_MAJOR;
 $HIP_VERSION_MINOR = $hipVersion{'HIP_VERSION_MINOR'} // $HIP_BASE_VERSION_MINOR;
 $HIP_VERSION_PATCH = $hipVersion{'HIP_VERSION_PATCH'} // $HIP_BASE_VERSION_PATCH;
