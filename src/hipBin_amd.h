@@ -210,29 +210,31 @@ void HipBinAmd::initializeHipCXXFlags() {
 
 // populates clang path.
 void HipBinAmd::constructCompilerPath() {
-  string complierPath;
+  string compilerPath;
   const EnvVariables& envVariables = getEnvVariables();
   if (envVariables.hipClangPathEnv_.empty()) {
     fs::path hipClangPath;
     const OsType& osInfo = getOSInfo();
     if (osInfo == windows) {
-      complierPath = getHipPath();
-      hipClangPath = complierPath;
+      compilerPath = getHipPath();
+      hipClangPath = compilerPath;
     } else {
-      complierPath = getRoccmPath();
-      hipClangPath = complierPath;
+      compilerPath = getRoccmPath();
+      hipClangPath = compilerPath;
     }
 
-    if (fs::exists(complierPath + "llvm/bin/clang++")) {
+    if (fs::exists(compilerPath + "/llvm/bin/clang++")) {
       hipClangPath /= "llvm/bin";
     } else {
       hipClangPath /= "bin";
     }
-    complierPath = hipClangPath.string();
+
+    compilerPath = hipClangPath.string();
+
   } else {
-    complierPath = envVariables.hipClangPathEnv_;
+    compilerPath = envVariables.hipClangPathEnv_;
   }
-  hipClangPath_ = complierPath;
+  hipClangPath_ = compilerPath;
 }
 
 // returns clang path.
@@ -719,8 +721,12 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
       regex reg("[^-a-zA-Z0-9_=+,.\\/]");
       arg = regex_replace(arg, reg, "\\$&");
     }
-    if (!swallowArg)
-      toolArgs += " " + arg;
+    if (!swallowArg) {
+      if (os == windows)
+        toolArgs += " \"" + arg + "\"";
+      else
+	toolArgs += " " + arg;
+    }
     prevArg = arg;
   }  // end of ARGV Processing Loop
 
