@@ -68,6 +68,7 @@ def hipBuildTest(String backendLabel) {
             // Running the build on HIP TESTS workspace
             dir("${WORKSPACE}/hip-tests") {
                 env.HIP_PATH = "${CLR_DIR}" + "/build/install"
+                env.HIPCC_VERBOSE = 1
                 sh  """#!/usr/bin/env bash
                     set -x
                     rm -rf build
