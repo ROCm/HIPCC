@@ -81,7 +81,7 @@ def hipBuildTest(String backendLabel) {
                         export HIP_PLATFORM=nvidia
                         cmake -DHIP_PLATFORM=nvidia ../catch
                     fi
-                    make -j\$(nproc) build_tests
+                    make -j\$(nproc) build_tests VERBOSE=1
                     """
             }
         }
