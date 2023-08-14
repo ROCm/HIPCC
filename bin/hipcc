@@ -33,9 +33,10 @@ $USE_PERL_SCRIPT //= 1;  # use defined-or assignment operator.  Use env var, but
 
 my $isWindows =  ($^O eq 'MSWin32' or $^O eq 'msys');
 # escapes args with quotes SWDEV-341955
+# do not escape @ for rsp files on windows
 foreach $arg (@ARGV) {
   if ($isWindows) {
-    $arg =~ s/[^-a-zA-Z0-9_=+,.:\/\\ ]/\\$&/g;
+    $arg =~ s/[^-a-zA-Z0-9_=+,.:@\/\\ ]/\\$&/g;
   }
 }
 
