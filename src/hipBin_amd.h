@@ -300,7 +300,7 @@ const PlatformInfo& HipBinAmd::getPlatformInfo() const {
 
 
 string HipBinAmd::getCppConfig() {
-  string cppConfig = " -D__HIP_PLATFORM_HCC__= -D__HIP_PLATFORM_AMD__=";
+  string cppConfig = " -D__HIP_PLATFORM_AMD__=";
 
   string compilerVersion;
   compilerVersion = getCompilerVersion();

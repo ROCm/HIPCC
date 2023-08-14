@@ -71,7 +71,7 @@ if ($HIP_COMPILER eq "clang") {
         $HIP_CLANG_INCLUDE = `$HIP_CLANG_PATH/clang++ --print-resource-dir`;
     }
 
-    $CPP_CONFIG = " -D__HIP_PLATFORM_HCC__= -D__HIP_PLATFORM_AMD__=";
+    $CPP_CONFIG = " -D__HIP_PLATFORM_AMD__=";
 
     $HIP_PATH_INCLUDE = $HIP_PATH."/include";
     if($isWindows) {
@@ -81,7 +81,7 @@ if ($HIP_COMPILER eq "clang") {
     }
 }
 if ($HIP_PLATFORM eq "nvidia") {
-    $CPP_CONFIG = " -D__HIP_PLATFORM_NVCC__= -D__HIP_PLATFORM_NVIDIA__= -I$HIP_PATH/include -I$CUDA_PATH/include";
+    $CPP_CONFIG = " -D__HIP_PLATFORM_NVIDIA__= -I$HIP_PATH/include -I$CUDA_PATH/include";
 };
 
 if ($p_help) {
