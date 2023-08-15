@@ -208,8 +208,6 @@ if ($HIP_PLATFORM eq "amd") {
 
     $HIPCC=get_normalized_path("$CUDA_PATH/bin/nvcc");
     $HIPCXXFLAGS .= " -Wno-deprecated-gpu-targets ";
-    $HIPCXXFLAGS .= " -isystem " . get_normalized_path("$CUDA_PATH/include");
-    $HIPCFLAGS .= " -isystem " . get_normalized_path("$CUDA_PATH/include");
 
     $HIPLDFLAGS = " -Wno-deprecated-gpu-targets -lcuda -lcudart -L" . get_normalized_path("$CUDA_PATH/lib64");
 } else {
@@ -217,10 +215,6 @@ if ($HIP_PLATFORM eq "amd") {
     printf ("       or HIP_COMPILER = '$HIP_COMPILER'");
     exit (-1);
 }
-
-# Add paths to common HIP includes:
-$HIPCXXFLAGS .= " -isystem " . get_normalized_path("$HIP_INCLUDE_PATH");
-$HIPCFLAGS .= " -isystem " . get_normalized_path("$HIP_INCLUDE_PATH");
 
 my $compileOnly = 0;
 my $needCXXFLAGS = 0;  # need to add CXX flags to compile step
