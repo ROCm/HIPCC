@@ -218,10 +218,6 @@ if ($HIP_PLATFORM eq "amd") {
     exit (-1);
 }
 
-# Add paths to common HIP includes:
-$HIPCXXFLAGS .= " -isystem " . get_normalized_path("$HIP_INCLUDE_PATH");
-$HIPCFLAGS .= " -isystem " . get_normalized_path("$HIP_INCLUDE_PATH");
-
 my $compileOnly = 0;
 my $needCXXFLAGS = 0;  # need to add CXX flags to compile step
 my $needCFLAGS = 0;    # need to add C flags to compile step
@@ -372,15 +368,6 @@ foreach $arg (@ARGV)
         $hsacoVersion = $arg;
         $swallowArg = 1;
     }
-    if($arg =~ /\.rsp$/) {
-        $pre_rsp = " ";
-        if($isWindows) {
-            $pre_rsp = " --rsp-quoting=windows ";
-        }
-        $HIPLDFLAGS .= $pre_rsp.$arg;
-        $HIPCXXFLAGS .= $pre_rsp.$arg;
-        $swallowArg = 1;
-    }
 
     # nvcc does not handle standard compiler options properly
     # This can prevent hipcc being used as standard CXX/C Compiler
@@ -480,7 +467,7 @@ foreach $arg (@ARGV)
     # Do the quoting here because sometimes the $arg is changed in the loop
     # Important to have all of '-Xlinker' in the set of unquoted characters.
     if (not $isWindows and $escapeArg) {
-        $arg =~ s/[^-a-zA-Z0-9_=+,.@\/]/\\$&/g;
+        $arg =~ s/[^-a-zA-Z0-9_=+,.\/]/\\$&/g;
     }
     $toolArgs .= " $arg" unless $swallowArg;
     $prevArg = $arg;
