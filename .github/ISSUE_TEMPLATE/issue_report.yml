@@ -152,7 +152,7 @@ body:
       - rocWMMA
       - rpp
       - Tensile
-    default: 9
+    default: 12
 - type: textarea
   attributes:
     label: Steps to Reproduce
