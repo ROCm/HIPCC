@@ -4,10 +4,26 @@
 # list see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
-from rocm_docs import ROCmDocs
+# configurations for PDF output by Read the Docs
+project = "HIPCC Documentation"
+author = "Advanced Micro Devices, Inc."
+copyright = "Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved."
+version = "5.7.0"
+version = "5.7.0"
 
-docs_core = ROCmDocs("HIPCC Documentation")
-docs_core.setup()
+exclude_patterns = ['temp']
 
-for sphinx_var in ROCmDocs.SPHINX_VARS:
-    globals()[sphinx_var] = getattr(docs_core, sphinx_var)
+external_toc_path = "./sphinx/_toc.yml"
+
+extensions = ["rocm_docs"]
+
+external_projects_current_project = "hipcc"
+
+html_theme = "rocm_docs_theme"
+html_theme_options = {"flavor": "rocm-docs-home"}
+
+html_title = "HIPCC Documentation"
+
+html_theme_options = {
+    "link_main_doc": False
+}
